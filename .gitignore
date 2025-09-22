@@ -59,6 +59,10 @@ trained_models/*.h5
 trained_models/*.keras
 trained_models/brain_tumor_savedmodel/
 
+# Training outputs (auto-generated)
+trained_models/training_plots.png
+trained_models/*.png
+
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 

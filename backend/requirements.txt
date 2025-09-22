@@ -1,0 +1,15 @@
+# filepath: c:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Project\Medical_Image_Analysis_System\backend\requirements.txt
+flask==3.0.0
+flask-cors==4.0.0
+tensorflow==2.16.2
+pillow==10.4.0
+numpy==1.26.4
+scikit-learn==1.3.2
+matplotlib==3.8.0
+opencv-python==4.8.1.78
+jupyter==1.1.1
+pandas==2.1.4
+seaborn==0.13.0
+ipykernel==6.29.0
+keras==3.0.5
+flask-limiter==3.5.0

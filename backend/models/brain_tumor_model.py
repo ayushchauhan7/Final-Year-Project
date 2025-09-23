@@ -60,3 +60,21 @@ class BrainTumorModel:
             'probabilities': probabilities,
             'tumor_detected': predicted_class != 'no_tumor'
         }
+
+def create_brain_tumor_model():
+    base_model = tf.keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    base_model.trainable = False
+    
+    inputs = tf.keras.Input(shape=(224, 224, 3))
+    x = base_model(inputs, training=False)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dense(1024, activation='relu')(x)
+    x = tf.keras.layers.Dropout(0.5)(x)
+    
+    # Update final layer to 2 classes
+    outputs = tf.keras.layers.Dense(2, activation='softmax', name='predictions')(x)
+    
+    model = tf.keras.Model(inputs, outputs)
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    
+    return model

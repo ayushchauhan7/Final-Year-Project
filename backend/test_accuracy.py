@@ -5,23 +5,23 @@ import json
 def test_image_accuracy():
     """Simple script to test model accuracy with known images"""
     
-    # Define test images with expected results
+    # Updated test cases for 2-class system
     test_cases = [
         {
-            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Testing\glioma_tumor\image(1).jpg',
-            'expected': 'glioma_tumor'
-        },
-        {
-            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Testing\meningioma_tumor\image(1).jpg',
+            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Brain Tumor Dataset\Testing\meningioma_tumor\image(1).jpg',
             'expected': 'meningioma_tumor'
         },
         {
-            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Testing\no_tumor\image(1).jpg',
+            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Brain Tumor Dataset\Testing\no_tumor\image(1).jpg',
             'expected': 'no_tumor'
         },
         {
-            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Testing\pituitary_tumor\image(1).jpg',
-            'expected': 'pituitary_tumor'
+            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Brain Tumor Dataset\Testing\meningioma_tumor\image(2).jpg',
+            'expected': 'meningioma_tumor'
+        },
+        {
+            'path': r'C:\Users\Abhay Tyagi\OneDrive - ABES\Desktop\4th Year Project\Datasets\Brain Tumor Dataset\Testing\no_tumor\image(2).jpg',
+            'expected': 'no_tumor'
         }
     ]
     

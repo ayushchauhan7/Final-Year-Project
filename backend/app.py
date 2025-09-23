@@ -114,7 +114,7 @@ def preprocess_image(image):
 def process_prediction(prediction):
     """Process model prediction and return formatted result"""
     # Based on training output: {'glioma_tumor': 0, 'meningioma_tumor': 1, 'no_tumor': 2, 'pituitary_tumor': 3}
-    classes = ['glioma_tumor', 'meningioma_tumor', 'no_tumor', 'pituitary_tumor']
+    classes = ['meningioma_tumor', 'no_tumor']
     
     predicted_index = np.argmax(prediction[0])
     predicted_class = classes[predicted_index]
@@ -204,8 +204,8 @@ def health_check():
         'message': 'Brain Tumor Detection API is running',
         'model_loaded': brain_tumor_model is not None,
         'class_mapping': {
-            'training_indices': {'glioma_tumor': 0, 'meningioma_tumor': 1, 'no_tumor': 2, 'pituitary_tumor': 3},
-            'api_classes': ['glioma_tumor', 'meningioma_tumor', 'no_tumor', 'pituitary_tumor']
+            'training_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
+            'api_classes': ['meningioma_tumor', 'no_tumor']
         }
     })
 
@@ -328,7 +328,7 @@ def debug_prediction():
     raw_prediction = brain_tumor_model.predict(processed_image)
     
     # Our current class mapping
-    classes = ['glioma_tumor', 'meningioma_tumor', 'no_tumor', 'pituitary_tumor']
+    classes = ['meningioma_tumor', 'no_tumor']
     
     # Show detailed breakdown
     detailed_probs = {}
@@ -363,7 +363,7 @@ def debug_prediction():
             'confidence_level': 'High' if top_prob > 0.8 else 'Medium' if top_prob > 0.6 else 'Low'
         },
         'class_mapping': {
-            'training_indices': {'glioma_tumor': 0, 'meningioma_tumor': 1, 'no_tumor': 2, 'pituitary_tumor': 3},
+            'training_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
             'api_classes': classes
         }
     })
@@ -387,11 +387,8 @@ def debug_class_order():
     
     # Different possible class orders to test
     possible_orders = [
-        ['glioma_tumor', 'meningioma_tumor', 'no_tumor', 'pituitary_tumor'],  # Current API order
-        ['glioma_tumor', 'no_tumor', 'meningioma_tumor', 'pituitary_tumor'],  # Alternative 1
-        ['no_tumor', 'glioma_tumor', 'meningioma_tumor', 'pituitary_tumor'],  # Alternative 2
-        ['meningioma_tumor', 'glioma_tumor', 'no_tumor', 'pituitary_tumor'],  # Alternative 3
-        ['no_tumor', 'glioma_tumor', 'pituitary_tumor', 'meningioma_tumor']   # Alternative 4
+        ['meningioma_tumor', 'no_tumor'],  # Current API order 
+        ['no_tumor', 'meningioma_tumor'],  
     ]
     
     results = {}
@@ -415,7 +412,7 @@ def debug_class_order():
         'filename': image_file.filename,
         'raw_prediction': [round(float(x), 4) for x in raw_prediction[0]],
         'possible_interpretations': results,
-        'training_class_indices': {'glioma_tumor': 0, 'meningioma_tumor': 1, 'no_tumor': 2, 'pituitary_tumor': 3},
+        'training_class_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
         'note': 'Compare results to see which interpretation makes sense for your test image'
     })
 
@@ -423,25 +420,15 @@ def debug_class_order():
 def get_classes():
     """Get available tumor classes with descriptions"""
     classes = {
-        'glioma_tumor': {
-            'name': 'Glioma Tumor',
-            'description': 'A type of tumor that starts in the brain or spine',
-            'index': 0
-        },
         'meningioma_tumor': {
             'name': 'Meningioma Tumor',
             'description': 'A tumor that arises from the meninges',
-            'index': 1
+            'index': 0
         },
         'no_tumor': {
             'name': 'No Tumor',
             'description': 'Normal brain scan with no tumor detected',
-            'index': 2
-        },
-        'pituitary_tumor': {
-            'name': 'Pituitary Tumor',
-            'description': 'A tumor in the pituitary gland',
-            'index': 3
+            'index': 1
         }
     }
     return jsonify({'success': True, 'classes': classes})
@@ -456,9 +443,9 @@ def get_model_info():
         'success': True,
         'model_loaded': True,
         'input_shape': str(brain_tumor_model.input_shape),
-        'output_classes': 4,
+        'output_classes': 2,
         'model_type': 'CNN for Brain Tumor Classification',
-        'class_indices': {'glioma_tumor': 0, 'meningioma_tumor': 1, 'no_tumor': 2, 'pituitary_tumor': 3},
+        'class_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
         'confidence_threshold': 0.55
     })
 
@@ -473,7 +460,7 @@ def get_model_performance():
             'architecture': 'Basic CNN (4 Conv2D layers)',
             'training_epochs': 15,
             'input_size': '224x224x3',
-            'output_classes': 4
+            'output_classes': 2
         },
         'known_limitations': {
             'training_epochs': 'Only 15 epochs - may need 30-50 for medical images',
@@ -697,10 +684,8 @@ def test_page():
         <div class="info">
             <strong>Training Class Indices:</strong>
             <ul>
-                <li>glioma_tumor: 0</li>
-                <li>meningioma_tumor: 1</li>
-                <li>no_tumor: 2</li>
-                <li>pituitary_tumor: 3</li>
+                <li>meningioma_tumor: 0</li>
+                <li>no_tumor: 1</li>
             </ul>
         </div>
     </body>

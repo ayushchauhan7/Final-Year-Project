@@ -1,5 +1,7 @@
 # Node.js (for frontend)
 node_modules/
+dist/
+trained_models
 
 # Python Virtual Environment
 venv/

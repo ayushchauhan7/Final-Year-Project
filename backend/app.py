@@ -1,717 +1,311 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-import os
-import tensorflow as tf
+from flask import Flask, render_template, request, send_from_directory, jsonify
+from tensorflow.keras.models import load_model
+from keras.preprocessing.image import load_img, img_to_array
 import numpy as np
-from PIL import Image
-import time
-import json
-from database import PredictionDatabase
+import os
+import datetime
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
 
-# Global variables
-brain_tumor_model = None
-db = PredictionDatabase()
+# Load the trained model
+model = load_model('../notebooks/brain_tumor_model.h5')
 
-# Rate limiting
-limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
-limiter.init_app(app)
+# Class labels
+class_labels = ['glioma', 'meningioma' ,'notumor', 'pituitary']
 
-# ============================================================================
-# MODEL LOADING
-# ============================================================================
+# Define the uploads folder
+UPLOAD_FOLDER = './uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
-def load_model():
-    """Load the trained brain tumor model"""
-    global brain_tumor_model
-    try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        model_path = os.path.join(project_root, 'trained_models', 'brain_tumor_model.keras')
-        
-        print(f"Looking for model at: {model_path}")
-        
-        if os.path.exists(model_path):
-            brain_tumor_model = tf.keras.models.load_model(model_path)
-            print("✓ Brain tumor model loaded successfully!")
-            
-            # Print model summary for debugging
-            print("Model input shape:", brain_tumor_model.input_shape)
-            print("Model output shape:", brain_tumor_model.output_shape)
-            return True
-        else:
-            print("✗ Model file not found.")
-            print(f"Please check if the model exists at: {model_path}")
-            return False
-    except Exception as e:
-        print(f"✗ Error loading model: {e}")
-        return False
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# ============================================================================
-# IMAGE PROCESSING FUNCTIONS
-# ============================================================================
+# Store prediction history (simple in-memory storage)
+prediction_history = []
 
-def validate_image(image_file):
-    """Basic image validation"""
-    try:
-        # Check file size (max 10MB)
-        image_file.seek(0, 2)
-        file_size = image_file.tell()
-        image_file.seek(0)
-        
-        if file_size > 10 * 1024 * 1024:
-            return False, "File size too large. Maximum 10MB allowed."
-        
-        # Try to open image
-        image = Image.open(image_file)
-        
-        # Check format
-        if image.format not in ['JPEG', 'PNG', 'JPG']:
-            return False, "Unsupported format. Please use JPEG or PNG."
-        
-        # Check dimensions
-        width, height = image.size
-        if width < 50 or height < 50:
-            return False, "Image too small. Minimum 50x50 pixels required."
-        
-        if width > 5000 or height > 5000:
-            return False, "Image too large. Maximum 5000x5000 pixels allowed."
-        
-        # Verify image integrity
-        image.verify()
-        
-        return True, "Image validation successful"
-        
-    except Exception as e:
-        return False, f"Invalid image file: {str(e)}"
+# Helper function to predict tumor type
+def predict_tumor(image_path):
+    IMAGE_SIZE = 128
+    img = load_img(image_path, target_size=(IMAGE_SIZE, IMAGE_SIZE))
+    img_array = img_to_array(img) / 255.0  # Normalize pixel values
+    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
 
-def preprocess_image(image):
-    """Preprocess image for model prediction"""
-    try:
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        image = image.resize((224, 224))
-        image_array = np.array(image) / 255.0
-        image_array = np.expand_dims(image_array, axis=0)
-        
-        return image_array
-    except Exception as e:
-        raise Exception(f"Error preprocessing image: {e}")
+    predictions = model.predict(img_array)
+    predicted_class_index = np.argmax(predictions, axis=1)[0]
+    confidence_score = np.max(predictions, axis=1)[0]
 
-# ============================================================================
-# PREDICTION PROCESSING
-# ============================================================================
+    if class_labels[predicted_class_index] == 'notumor':
+        return "No Tumor", confidence_score, predictions[0]
+    else:
+        return f"Tumor: {class_labels[predicted_class_index]}", confidence_score, predictions[0]
 
-def process_prediction(prediction):
-    """Process model prediction and return formatted result"""
-    # Based on training output: {'glioma_tumor': 0, 'meningioma_tumor': 1, 'no_tumor': 2, 'pituitary_tumor': 3}
-    classes = ['meningioma_tumor', 'no_tumor']
-    
-    predicted_index = np.argmax(prediction[0])
-    predicted_class = classes[predicted_index]
-    confidence = float(prediction[0][predicted_index])
-    
-    # Check for close predictions (uncertainty detection)
-    sorted_probs = sorted(prediction[0], reverse=True)
-    top_prob = sorted_probs[0]
-    second_prob = sorted_probs[1] if len(sorted_probs) > 1 else 0
-    is_uncertain = (top_prob - second_prob) < 0.2  # Less than 20% difference
-    
-    probabilities = {}
-    for i, class_name in enumerate(classes):
-        probabilities[class_name] = round(float(prediction[0][i]) * 100, 2)
-    
-    tumor_detected = predicted_class != 'no_tumor'
-    
-    return {
-        'class': predicted_class,
-        'confidence': confidence,
-        'probabilities': probabilities,
-        'tumor_detected': tumor_detected,
-        'is_uncertain': is_uncertain,
-        'uncertainty_note': 'Prediction is uncertain - consider multiple analyses' if is_uncertain else None
+# Route for the main page (index.html)
+@app.route('/', methods=['GET'])
+def index():
+    # Display API documentation as JSON response on GET request
+    api_info = {
+        "title": "Brain Tumor Detection API",
+        "description": "Medical Image Analysis System for Brain Tumor Classification",
+        "version": "1.0.0",
+        "endpoints": {
+            "/": "GET - API Documentation",
+            "/test": "GET/POST - Web Interface for Testing",
+            "/api/predict": "POST - Analyze brain scan image",
+            "/api/health": "GET - Health check and system status",
+            "/api/classes": "GET - Available tumor classes",
+            "/api/model/info": "GET - Model information and configuration",
+            "/api/debug/prediction": "POST - Detailed prediction analysis",
+            "/api/debug/class-order": "GET - Test different class interpretations",
+            "/api/analytics/summary": "GET - Prediction statistics",
+            "/api/predictions/history": "GET - Recent prediction history",
+            "/uploads/<filename>": "GET - Serve uploaded files"
+        },
+        "usage": {
+            "web_interface": "Visit /test for file upload interface",
+            "api_usage": "Use /api/* endpoints for programmatic access",
+            "test_page": "/test serves as the web interface for testing"
+        },
+        "model_info": {
+            "classes": class_labels,
+            "input_size": "128x128 pixels",
+            "model_type": "CNN with transfer learning"
+        },
+        "examples": {
+            "curl_predict": "curl -X POST -F 'image=@brain_scan.jpg' http://localhost:5000/api/predict",
+            "curl_health": "curl http://localhost:5000/api/health",
+            "web_test": "Visit http://localhost:5000/test for web interface"
+        }
     }
+    return jsonify(api_info)
 
-def get_prediction_message(result):
-    """Generate user-friendly message based on prediction"""
-    confidence_percent = round(result['confidence'] * 100, 2)
-    
-    if not result['tumor_detected']:
-        if result['confidence'] > 0.8:
-            return f"No tumor detected with {confidence_percent}% confidence. The brain scan appears normal."
-        elif result['confidence'] > 0.6:
-            return f"Likely no tumor detected ({confidence_percent}% confidence), but consider professional evaluation."
-        else:
-            return f"Low confidence prediction ({confidence_percent}%) - image quality may be poor or model is uncertain. Professional evaluation recommended."
-    else:
-        tumor_type = result['class'].replace('_', ' ').title()
-        if result['confidence'] > 0.8:
-            return f"{tumor_type} detected with {confidence_percent}% confidence. Please consult a medical professional immediately."
-        elif result['confidence'] > 0.6:
-            return f"Possible {tumor_type} detected ({confidence_percent}% confidence). Medical evaluation recommended."
-        elif result['is_uncertain']:
-            return f"Uncertain prediction: Possible {tumor_type} ({confidence_percent}% confidence). Results are ambiguous - multiple medical opinions recommended."
-        else:
-            return f"Low confidence detection of {tumor_type} ({confidence_percent}%). Image quality or model limitations may affect accuracy. Professional diagnosis essential."
+# Route for the test interface (index.html)
+@app.route('/test', methods=['GET', 'POST'])
+def test_interface():
+    if request.method == 'POST':
+        # Handle file upload
+        file = request.files['file']
+        if file:
+            # Save the file
+            file_location = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+            file.save(file_location)
 
-def get_reliability_level(confidence):
-    """Get reliability level based on confidence"""
-    if confidence >= 0.9:
-        return 'High'
-    elif confidence >= 0.75:
-        return 'Medium'
-    else:
-        return 'Low'
+            # Predict the tumor
+            result, confidence, all_predictions = predict_tumor(file_location)
+            
+            # Store in history
+            prediction_history.append({
+                "timestamp": datetime.datetime.now().isoformat(),
+                "filename": file.filename,
+                "result": result,
+                "confidence": float(confidence),  # Convert to Python float
+                "method": "web_interface"
+            })
 
-# ============================================================================
-# API ROUTES
-# ============================================================================
+            # Return result along with image path for display
+            return render_template('index.html', result=result, confidence=f"{confidence*100:.2f}%", file_path=f'/uploads/{file.filename}')
 
-@app.route('/')
-def home():
-    """Home endpoint with API information"""
-    return jsonify({
-        'message': 'Brain Tumor Detection API',
-        'status': 'running',
-        'model_loaded': brain_tumor_model is not None,
-        'available_endpoints': {
-            'health_check': '/api/health',
-            'predict': '/api/predict (POST)',
-            'debug_prediction': '/api/debug/prediction (POST)',
-            'debug_class_order': '/api/debug/class-order (POST)',
-            'classes': '/api/classes',
-            'model_info': '/api/model/info',
-            'analytics': '/api/analytics/summary',
-            'history': '/api/predictions/history',
-            'test_page': '/test'
-        }
-    })
+    return render_template('index.html', result=None)
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy', 
-        'message': 'Brain Tumor Detection API is running',
-        'model_loaded': brain_tumor_model is not None,
-        'class_mapping': {
-            'training_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
-            'api_classes': ['meningioma_tumor', 'no_tumor']
-        }
-    })
+# Route to serve uploaded files
+@app.route('/uploads/<filename>')
+def get_uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# === NEW API ENDPOINTS ===
 
 @app.route('/api/predict', methods=['POST'])
-@limiter.limit("10 per minute")
-def predict_brain_tumor():
-    """Main prediction endpoint"""
-    start_time = time.time()
-    
+def api_predict():
     try:
-        # Check if model is loaded
-        if brain_tumor_model is None:
-            return jsonify({
-                'success': False, 
-                'error': 'Model not loaded. Please check server logs.'
-            }), 500
-
-        # Check if image is provided
         if 'image' not in request.files:
-            return jsonify({'success': False, 'error': 'No image provided'}), 400
+            return jsonify({"error": "No image provided"}), 400
         
-        image_file = request.files['image']
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({"error": "No image selected"}), 400
         
-        if image_file.filename == '':
-            return jsonify({'success': False, 'error': 'No image selected'}), 400
-
-        # Validate image
-        is_valid, message = validate_image(image_file)
-        if not is_valid:
-            return jsonify({
-                'success': False, 
-                'error': message,
-                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
-            }), 400
+        # Save file
+        file_location = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+        file.save(file_location)
         
-        # Process image
-        image_file.seek(0)
-        image = Image.open(image_file.stream)
-        processed_image = preprocess_image(image)
+        # Predict
+        result, confidence, all_predictions = predict_tumor(file_location)
         
-        # Make prediction
-        prediction = brain_tumor_model.predict(processed_image)
-        result = process_prediction(prediction)
+        # Store in history
+        prediction_history.append({
+            "timestamp": datetime.datetime.now().isoformat(),
+            "filename": file.filename,
+            "result": result,
+            "confidence": float(confidence),  # Convert to Python float
+            "method": "api"
+        })
         
-        # Check confidence threshold
-        MIN_CONFIDENCE_THRESHOLD = 0.30  # In app.py
-        
-        if result['confidence'] < MIN_CONFIDENCE_THRESHOLD:
-            return jsonify({
-                'success': False,
-                'error': 'Low confidence prediction - image may not be suitable for analysis',
-                'confidence': round(result['confidence'] * 100, 2),
-                'suggestion': 'Please upload a clearer brain scan image or try a different image',
-                'probabilities': result['probabilities'],
-                'processing_time_ms': round((time.time() - start_time) * 1000, 2),
-                'note': 'Consider using the debug endpoint /api/debug/prediction for detailed analysis'
-            }), 400
-        
-        # Add warning for uncertain predictions
-        response_data = {
-            'success': True,
-            'prediction': result['class'],
-            'confidence': round(result['confidence'] * 100, 2),
-            'probabilities': result['probabilities'],
-            'tumor_detected': result['tumor_detected'],
-            'message': get_prediction_message(result),
-            'reliability_level': get_reliability_level(result['confidence']),
-            'processing_time_ms': round((time.time() - start_time) * 1000, 2)
-        }
-        
-        # Add uncertainty warning if applicable
-        if result['is_uncertain']:
-            response_data['warning'] = True
-            response_data['uncertainty_note'] = result['uncertainty_note']
-            response_data['recommendation'] = 'Consider getting a second opinion or retaking the scan'
-        
-        # Save to database
-        try:
-            prediction_data = {
-                'filename': image_file.filename,
-                'prediction': result['class'],
-                'confidence': result['confidence'],
-                'probabilities': result['probabilities'],
-                'tumor_detected': result['tumor_detected'],
-                'reliability_level': get_reliability_level(result['confidence']),
-                'processing_time_ms': (time.time() - start_time) * 1000,
-                'ip_address': request.remote_addr
-            }
-            prediction_id = db.save_prediction(prediction_data)
-            response_data['prediction_id'] = prediction_id
-        except Exception as db_error:
-            print(f"Database error: {db_error}")
-            response_data['prediction_id'] = None
-        
-        return jsonify(response_data)
-    
-    except Exception as e:
-        print(f"Prediction error: {e}")
         return jsonify({
-            'success': False, 
-            'error': str(e),
-            'processing_time_ms': round((time.time() - start_time) * 1000, 2)
-        }), 500
-
-@app.route('/api/debug/prediction', methods=['POST'])
-def debug_prediction():
-    """Debug endpoint to see raw model output and detailed analysis"""
-    if brain_tumor_model is None:
-        return jsonify({'error': 'Model not loaded'}), 500
-    
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image provided'}), 400
-    
-    image_file = request.files['image']
-    image_file.seek(0)
-    image = Image.open(image_file.stream)
-    processed_image = preprocess_image(image)
-    
-    # Get raw prediction
-    raw_prediction = brain_tumor_model.predict(processed_image)
-    
-    # Our current class mapping
-    classes = ['meningioma_tumor', 'no_tumor']
-    
-    # Show detailed breakdown
-    detailed_probs = {}
-    for i, class_name in enumerate(classes):
-        detailed_probs[f"{i}_{class_name}"] = {
-            'index': i,
-            'class': class_name,
-            'raw_probability': float(raw_prediction[0][i]),
-            'percentage': round(float(raw_prediction[0][i]) * 100, 2)
-        }
-    
-    predicted_index = int(np.argmax(raw_prediction[0]))
-    
-    # Additional analysis - Convert numpy types to Python types
-    sorted_probs = sorted(raw_prediction[0], reverse=True)
-    top_prob = float(sorted_probs[0])  # Convert to float
-    second_prob = float(sorted_probs[1]) if len(sorted_probs) > 1 else 0.0
-    prob_difference = float(top_prob - second_prob)  # Convert to float
-    
-    return jsonify({
-        'filename': image_file.filename,
-        'raw_prediction_array': [float(x) for x in raw_prediction[0]],
-        'predicted_index': predicted_index,
-        'predicted_class': classes[predicted_index],
-        'confidence': float(raw_prediction[0][predicted_index]),
-        'detailed_probabilities': detailed_probs,
-        'analysis': {
-            'top_probability': top_prob,
-            'second_probability': second_prob,
-            'probability_difference': prob_difference,
-            'is_uncertain': bool(prob_difference < 0.2),  # Convert to Python bool
-            'confidence_level': 'High' if top_prob > 0.8 else 'Medium' if top_prob > 0.6 else 'Low'
-        },
-        'class_mapping': {
-            'training_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
-            'api_classes': classes
-        }
-    })
-
-@app.route('/api/debug/class-order', methods=['POST'])
-def debug_class_order():
-    """Debug endpoint to check different class order interpretations"""
-    if brain_tumor_model is None:
-        return jsonify({'error': 'Model not loaded'}), 500
-    
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image provided'}), 400
-    
-    image_file = request.files['image']
-    image_file.seek(0)
-    image = Image.open(image_file.stream)
-    processed_image = preprocess_image(image)
-    
-    # Get raw prediction
-    raw_prediction = brain_tumor_model.predict(processed_image)
-    
-    # Different possible class orders to test
-    possible_orders = [
-        ['meningioma_tumor', 'no_tumor'],  # Current API order 
-        ['no_tumor', 'meningioma_tumor'],  
-    ]
-    
-    results = {}
-    for i, class_order in enumerate(possible_orders):
-        probabilities = {}
-        for j, class_name in enumerate(class_order):
-            probabilities[class_name] = round(float(raw_prediction[0][j]) * 100, 2)
+            "prediction": result,
+            "confidence": f"{confidence*100:.2f}%",
+            "confidence_score": float(confidence),
+            "probabilities": {
+                class_labels[i]: float(all_predictions[i]) for i in range(len(class_labels))
+            },
+            "filename": file.filename
+        })
         
-        predicted_index = np.argmax(raw_prediction[0])
-        predicted_class = class_order[predicted_index]
-        
-        results[f'order_{i+1}'] = {
-            'description': f'Order {i+1}' + (' (Current API)' if i == 0 else ''),
-            'class_order': class_order,
-            'predicted_class': predicted_class,
-            'confidence': round(float(raw_prediction[0][predicted_index]) * 100, 2),
-            'probabilities': probabilities
-        }
-    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/health', methods=['GET'])
+def api_health():
     return jsonify({
-        'filename': image_file.filename,
-        'raw_prediction': [round(float(x), 4) for x in raw_prediction[0]],
-        'possible_interpretations': results,
-        'training_class_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
-        'note': 'Compare results to see which interpretation makes sense for your test image'
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "timestamp": datetime.datetime.now().isoformat(),
+        "upload_folder": UPLOAD_FOLDER,
+        "upload_folder_exists": os.path.exists(UPLOAD_FOLDER)
     })
 
 @app.route('/api/classes', methods=['GET'])
-def get_classes():
-    """Get available tumor classes with descriptions"""
-    classes = {
-        'meningioma_tumor': {
-            'name': 'Meningioma Tumor',
-            'description': 'A tumor that arises from the meninges',
-            'index': 0
-        },
-        'no_tumor': {
-            'name': 'No Tumor',
-            'description': 'Normal brain scan with no tumor detected',
-            'index': 1
-        }
-    }
-    return jsonify({'success': True, 'classes': classes})
-
-@app.route('/api/model/info', methods=['GET'])
-def get_model_info():
-    """Get model information"""
-    if brain_tumor_model is None:
-        return jsonify({'success': False, 'error': 'Model not loaded'}), 500
-    
+def api_classes():
     return jsonify({
-        'success': True,
-        'model_loaded': True,
-        'input_shape': str(brain_tumor_model.input_shape),
-        'output_classes': 2,
-        'model_type': 'CNN for Brain Tumor Classification',
-        'class_indices': {'meningioma_tumor': 0, 'no_tumor': 1},
-        'confidence_threshold': 0.55
+        "classes": class_labels,
+        "total_classes": len(class_labels),
+        "description": {
+            "glioma": "A type of brain tumor that starts in glial cells",
+            "meningioma": "A tumor that arises from the meninges",
+            "notumor": "No tumor detected in the scan",
+            "pituitary": "A tumor in the pituitary gland"
+        }
     })
 
-@app.route('/api/model/performance', methods=['GET'])
-def get_model_performance():
-    """Get model performance information"""
-    if brain_tumor_model is None:
-        return jsonify({'error': 'Model not loaded'}), 500
-    
-    performance_info = {
-        'model_info': {
-            'architecture': 'Basic CNN (4 Conv2D layers)',
-            'training_epochs': 15,
-            'input_size': '224x224x3',
-            'output_classes': 2
-        },
-        'known_limitations': {
-            'training_epochs': 'Only 15 epochs - may need 30-50 for medical images',
-            'architecture': 'Basic CNN - consider transfer learning (ResNet, VGG)',
-            'class_similarity': 'Glioma and Meningioma tumors can look very similar',
-            'dataset_size': 'Small dataset may lead to overfitting'
-        },
-        'accuracy_expectations': {
-            'good_performance': '>85% on test set',
-            'acceptable': '70-85% with uncertainty warnings',
-            'poor': '<70% - needs model improvement'
-        },
-        'improvement_suggestions': {
-            'immediate': [
-                'Lower confidence threshold to 40%',
-                'Add uncertainty warnings for close predictions',
-                'Test with multiple images from same class'
-            ],
-            'long_term': [
-                'Retrain with 30+ epochs',
-                'Use transfer learning (ResNet50, VGG16)',
-                'Collect more training data',
-                'Implement data balancing'
-            ]
-        }
-    }
-    
-    return jsonify(performance_info)
+@app.route('/api/model/info', methods=['GET'])
+def api_model_info():
+    return jsonify({
+        "model_type": "Brain Tumor Classification CNN",
+        "input_size": [128, 128, 3],
+        "classes": class_labels,
+        "total_parameters": model.count_params() if hasattr(model, 'count_params') else "Unknown",
+        "model_format": "Keras H5",
+        "preprocessing": "Normalization (0-1 range)"
+    })
+
+@app.route('/api/debug/prediction', methods=['POST'])
+def api_debug_prediction():
+    try:
+        if 'image' not in request.files:
+            return jsonify({"error": "No image provided"}), 400
+        
+        file = request.files['image']
+        file_location = os.path.join(app.config['UPLOAD_FOLDER'], f"debug_{file.filename}")
+        file.save(file_location)
+        
+        # Get detailed prediction info
+        result, confidence, all_predictions = predict_tumor(file_location)
+        
+        return jsonify({
+            "filename": file.filename,
+            "prediction": result,
+            "confidence": float(confidence),
+            "raw_predictions": all_predictions.tolist(),
+            "class_probabilities": {
+                class_labels[i]: {
+                    "probability": float(all_predictions[i]),
+                    "percentage": f"{all_predictions[i]*100:.2f}%"
+                } for i in range(len(class_labels))
+            },
+            "predicted_class_index": int(np.argmax(all_predictions)),
+            "debug_info": {
+                "max_probability": float(np.max(all_predictions)),
+                "min_probability": float(np.min(all_predictions)),
+                "prediction_spread": float(np.max(all_predictions) - np.min(all_predictions))
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e), "debug": True}), 500
+
+@app.route('/api/debug/class-order', methods=['GET'])  # Changed from POST to GET
+def api_debug_class_order():
+    return jsonify({
+        "current_class_order": class_labels,
+        "class_indices": {class_labels[i]: i for i in range(len(class_labels))},
+        "note": "This shows the current class interpretation order used by the model"
+    })
 
 @app.route('/api/analytics/summary', methods=['GET'])
-def get_analytics_summary():
-    """Get prediction analytics summary"""
-    try:
-        summary = db.get_analytics_summary()
+def api_analytics_summary():
+    if not prediction_history:
         return jsonify({
-            'status': 'success',
-            'data': summary
+            "total_predictions": 0,
+            "message": "No predictions made yet"
         })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+    
+    # Simple analytics - Convert any remaining numpy types
+    total = len(prediction_history)
+    tumor_count = sum(1 for p in prediction_history if "No Tumor" not in p["result"])
+    no_tumor_count = total - tumor_count
+    
+    # Clean recent predictions for JSON serialization
+    recent_predictions = prediction_history[-5:] if len(prediction_history) >= 5 else prediction_history
+    cleaned_predictions = []
+    
+    for pred in recent_predictions:
+        cleaned_pred = {
+            "timestamp": pred["timestamp"],
+            "filename": pred["filename"],
+            "result": pred["result"],
+            "confidence": float(pred["confidence"]),  # Ensure it's Python float
+            "method": pred["method"]
+        }
+        cleaned_predictions.append(cleaned_pred)
+    
+    return jsonify(clean_for_json({
+        "total_predictions": total,
+        "tumor_detected": tumor_count,
+        "no_tumor_detected": no_tumor_count,
+        "tumor_detection_rate": f"{(tumor_count/total)*100:.1f}%" if total > 0 else "0%",
+        "recent_predictions": prediction_history[-5:] if len(prediction_history) >= 5 else prediction_history
+    }))
 
 @app.route('/api/predictions/history', methods=['GET'])
-def get_prediction_history():
-    """Get recent prediction history"""
-    try:
-        limit = request.args.get('limit', 50, type=int)
-        history = db.get_prediction_history(limit)
-        
-        formatted_history = []
-        for row in history:
-            formatted_history.append({
-                'id': row[0],
-                'filename': row[1],
-                'prediction': row[2],
-                'confidence': row[3],
-                'probabilities': json.loads(row[4]),
-                'tumor_detected': bool(row[5]),
-                'reliability_level': row[6],
-                'processing_time_ms': row[7],
-                'created_at': row[8]
-            })
-        
-        return jsonify({'success': True, 'history': formatted_history})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/test/accuracy', methods=['GET'])
-def test_model_accuracy():
-    """Test model accuracy with known dataset images"""
-    if brain_tumor_model is None:
-        return jsonify({'error': 'Model not loaded'}), 500
+def api_predictions_history():
+    limit = request.args.get('limit', 10, type=int)
     
-    # Test results for verification
-    test_results = {
-        'message': 'Manual accuracy testing endpoint',
-        'instructions': {
-            'step_1': 'Upload images from your test dataset using /api/debug/prediction',
-            'step_2': 'Compare predicted class with expected class from folder name',
-            'step_3': 'Check if confidence levels are reasonable',
-            'step_4': 'Look for patterns in misclassifications'
-        },
-        'expected_accuracy': {
-            'good_model': '>80% accuracy on test set',
-            'current_threshold': '40% confidence minimum',
-            'uncertainty_warning': 'Predictions with <60% confidence should be flagged'
-        },
-        'troubleshooting': {
-            'all_wrong': 'Check class mapping order',
-            'low_confidence': 'Model needs more training epochs',
-            'specific_class_wrong': 'Class-specific training data issue',
-            'random_results': 'Model architecture or preprocessing issue'
+    # Clean all predictions for JSON serialization
+    recent_predictions = prediction_history[-limit:] if prediction_history else []
+    cleaned_predictions = []
+    
+    for pred in recent_predictions:
+        cleaned_pred = {
+            "timestamp": pred["timestamp"],
+            "filename": pred["filename"],
+            "result": pred["result"],
+            "confidence": float(pred["confidence"]),  # Ensure it's Python float
+            "method": pred["method"]
         }
-    }
+        cleaned_predictions.append(cleaned_pred)
     
-    return jsonify(test_results)
+    return jsonify(clean_for_json({
+        "total_predictions": len(prediction_history),
+        "recent_predictions": prediction_history[-limit:] if prediction_history else [],
+        "limit": limit
+    }))
 
-@app.route('/api/debug/database', methods=['GET'])
-def debug_database():
-    """Debug database connection and tables"""
-    try:
-        # Test database connection
-        summary = db.get_analytics_summary()
-        return jsonify({
-            'status': 'success',
-            'database_working': True,
-            'summary': summary
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'database_working': False,
-            'error': str(e),
-            'error_type': type(e).__name__
-        })
-
-@app.route('/test')
-def test_page():
-    """Enhanced test page for uploading images"""
-    html = '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Brain Tumor Detection Test</title>
-        <style>
-            body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
-            .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 10px 0; border-radius: 5px; }
-            .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 10px; margin: 10px 0; border-radius: 5px; }
-            .debug { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; margin: 10px 0; border-radius: 5px; }
-            .upload-form { background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; }
-            button { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
-            button:hover { background-color: #0056b3; }
-            .debug-btn { background-color: #dc3545; }
-            .debug-btn:hover { background-color: #c82333; }
-            .endpoint-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
-            .endpoint-item { background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6; }
-        </style>
-    </head>
-    <body>
-        <h1>Brain Tumor Detection API Test</h1>
-        
-        <div class="warning">
-            <strong>⚠️ Medical Disclaimer:</strong> This tool is for educational purposes only. 
-            Results should not be used for medical diagnosis without consulting a qualified healthcare professional.
-        </div>
-        
-        <div class="info">
-            <strong>📋 Upload Guidelines:</strong>
-            <ul>
-                <li>Upload brain MRI or CT scan images</li>
-                <li>Supported formats: JPEG, PNG</li>
-                <li>File size: Maximum 10MB</li>
-                <li>Minimum confidence threshold: 55%</li>
-            </ul>
-        </div>
-        
-        <div class="debug">
-            <strong>🔧 Debug Mode:</strong> Use debug endpoints to analyze prediction details and troubleshoot classification issues.
-        </div>
-        
-        <div class="upload-form">
-            <h2>Upload Brain Scan Image</h2>
-            <form action="/api/predict" method="post" enctype="multipart/form-data">
-                <input type="file" name="image" accept="image/jpeg,image/png" required>
-                <br><br>
-                <button type="submit">Analyze Brain Scan</button>
-            </form>
-            
-            <h3>Debug Analysis</h3>
-            <form action="/api/debug/prediction" method="post" enctype="multipart/form-data">
-                <input type="file" name="image" accept="image/jpeg,image/png" required>
-                <br><br>
-                <button type="submit" class="debug-btn">Debug Prediction</button>
-            </form>
-            
-            <form action="/api/debug/class-order" method="post" enctype="multipart/form-data">
-                <input type="file" name="image" accept="image/jpeg,image/png" required>
-                <br><br>
-                <button type="submit" class="debug-btn">Test Class Orders</button>
-            </form>
-        </div>
-        
-        <h2>API Endpoints</h2>
-        <div class="endpoint-list">
-            <div class="endpoint-item">
-                <strong><a href="/api/health">Health Check</a></strong>
-                <p>Check API status and class mapping</p>
-            </div>
-            <div class="endpoint-item">
-                <strong><a href="/api/classes">Classes Info</a></strong>
-                <p>Get tumor class descriptions</p>
-            </div>
-            <div class="endpoint-item">
-                <strong><a href="/api/model/info">Model Info</a></strong>
-                <p>Get model details and configuration</p>
-            </div>
-            <div class="endpoint-item">
-                <strong><a href="/api/analytics/summary">Analytics</a></strong>
-                <p>Get prediction statistics</p>
-            </div>
-            <div class="endpoint-item">
-                <strong><a href="/api/predictions/history">History</a></strong>
-                <p>View recent predictions</p>
-            </div>
-        </div>
-        
-        <h3>Model Performance Testing</h3>
-        <div class="info">
-            <strong>📊 Accuracy Testing:</strong>
-            <ul>
-                <li><a href="/api/test/accuracy">View Testing Guidelines</a></li>
-                <li><a href="/api/model/performance">Check Model Limitations</a></li>
-                <li>Test multiple images from each class folder</li>
-                <li>Compare predicted vs expected results</li>
-            </ul>
-        </div>
-        
-        <h3>Class Mapping Information</h3>
-        <div class="info">
-            <strong>Training Class Indices:</strong>
-            <ul>
-                <li>meningioma_tumor: 0</li>
-                <li>no_tumor: 1</li>
-            </ul>
-        </div>
-    </body>
-    </html>
-    '''
-    return html
-
-# ============================================================================
-# APPLICATION STARTUP
-# ============================================================================
+def clean_for_json(obj):
+    """Convert numpy types to Python types for JSON serialization"""
+    if isinstance(obj, dict):
+        return {key: clean_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_for_json(item) for item in obj]
+    elif hasattr(obj, 'item'):  # numpy types
+        return obj.item()
+    elif isinstance(obj, (np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, (np.int32, np.int64)):
+        return int(obj)
+    return obj
 
 if __name__ == '__main__':
-    print("🧠 Starting Brain Tumor Detection API...")
-    print("📁 Current working directory:", os.getcwd())
-    
-    # Load model on startup
-    if load_model():
-        print("✅ Server ready to accept predictions")
-        print("🔧 Debug endpoints available:")
-        print("   - /api/debug/prediction (detailed analysis)")
-        print("   - /api/debug/class-order (test different class orders)")
-    else:
-        print("❌ Server starting without model - predictions will fail")
-        print("📝 Please ensure the model file exists in the trained_models directory")
-    
-    # Run the Flask application
-    print("🚀 Starting server on http://localhost:5000")
-    print("📄 Test page available at http://localhost:5000/test")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("🚀 Brain Tumor Detection API Starting...")
+    print(f"📁 Upload folder: {UPLOAD_FOLDER}")
+    print(f"🔬 Model classes: {class_labels}")
+    print("📡 API Endpoints available at: http://127.0.0.1:5000")
+    app.run(debug=True)

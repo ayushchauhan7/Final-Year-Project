@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brain Tumor Detection System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .card {
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+
+        #results img, #api-results img, #debug-results img {
+            max-height: 400px;
+            margin-top: 15px;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .btn {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .lead {
+            margin-bottom: 30px;
+        }
+
+        .api-section {
+            border-left: 4px solid #007bff;
+            padding-left: 15px;
+        }
+
+        .debug-section {
+            border-left: 4px solid #28a745;
+            padding-left: 15px;
+        }
+
+        .json-output {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .nav-tabs .nav-link.active {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-5">
+        <div class="text-center">
+            <h1 class="display-4 text-primary">Brain Tumor Detection System</h1>
+            <p class="lead text-secondary">Comprehensive test interface for all endpoints</p>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="web-tab" data-bs-toggle="tab" data-bs-target="#web" type="button">Web Interface</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="api-tab" data-bs-toggle="tab" data-bs-target="#api" type="button">API Predict</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="debug-tab" data-bs-toggle="tab" data-bs-target="#debug" type="button">Debug API</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="myTabContent">
+            <!-- Web Interface Tab -->
+            <div class="tab-pane fade show active" id="web" role="tabpanel">
+                <div class="card shadow p-4 mt-4">
+                    <h4 class="text-primary">Standard Web Upload</h4>
+                    <p class="text-muted">Traditional form submission with page reload</p>
+                    <form method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">Select MRI Image:</label>
+                            <input type="file" class="form-control" id="file" name="file" accept="image/*" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Upload and Detect</button>
+                    </form>
+                </div>
+
+                {% if result %}
+                <div id="results" class="mt-4">
+                    <div class="card shadow">
+                        <div class="card-body">
+                            <h4 class="card-title text-success">{{ result }}</h4>
+                            <p class="card-text text-muted">Confidence: {{ confidence }}</p>
+                            <img src="{{ file_path }}" class="img-fluid rounded" alt="Uploaded Image">
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- API Predict Tab -->
+            <div class="tab-pane fade" id="api" role="tabpanel">
+                <div class="card shadow p-4 mt-4 api-section">
+                    <h4 class="text-primary">API Predict Endpoint</h4>
+                    <p class="text-muted">Test <code>/api/predict</code> endpoint with AJAX</p>
+                    <form id="api-form">
+                        <div class="mb-3">
+                            <label for="api-file" class="form-label">Select MRI Image:</label>
+                            <input type="file" class="form-control" id="api-file" accept="image/*" required>
+                        </div>
+                        <button type="button" class="btn btn-info" onclick="testApiPredict()">
+                            <span id="api-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                            Test API Predict
+                        </button>
+                    </form>
+                </div>
+
+                <!-- API Results -->
+                <div id="api-results" class="mt-4" style="display: none;">
+                    <div class="card shadow">
+                        <div class="card-body">
+                            <h4 class="card-title text-info">API Response</h4>
+                            <div id="api-json" class="json-output"></div>
+                            <div id="api-image-preview" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debug API Tab -->
+            <div class="tab-pane fade" id="debug" role="tabpanel">
+                <div class="card shadow p-4 mt-4 debug-section">
+                    <h4 class="text-success">Debug Prediction Endpoint</h4>
+                    <p class="text-muted">Test <code>/api/debug/prediction</code> with detailed analysis</p>
+                    <form id="debug-form">
+                        <div class="mb-3">
+                            <label for="debug-file" class="form-label">Select MRI Image:</label>
+                            <input type="file" class="form-control" id="debug-file" accept="image/*" required>
+                        </div>
+                        <button type="button" class="btn btn-success" onclick="testDebugPredict()">
+                            <span id="debug-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                            Test Debug Prediction
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Debug Results -->
+                <div id="debug-results" class="mt-4" style="display: none;">
+                    <div class="card shadow">
+                        <div class="card-body">
+                            <h4 class="card-title text-success">Debug Response</h4>
+                            <div id="debug-json" class="json-output"></div>
+                            <div id="debug-image-preview" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick API Info -->
+        <div class="card shadow p-4 mt-4">
+            <h5 class="text-secondary">Quick API Reference</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>Standard Endpoints:</strong>
+                    <ul class="list-unstyled mt-2">
+                        <li><code>GET /</code> - API Documentation</li>
+                        <li><code>GET /api/health</code> - Health Check</li>
+                        <li><code>GET /api/classes</code> - Available Classes</li>
+                        <li><code>GET /api/model/info</code> - Model Info</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <strong>Test These Endpoints:</strong>
+                    <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/health')">Test Health</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/classes')">Test Classes</button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/model/info')">Test Model Info</button>
+                </div>
+            </div>
+            <div id="quick-test-results" class="mt-3" style="display: none;">
+                <div class="json-output" id="quick-json"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Test API Predict endpoint
+        function testApiPredict() {
+            const fileInput = document.getElementById('api-file');
+            const spinner = document.getElementById('api-spinner');
+            const resultsDiv = document.getElementById('api-results');
+            const jsonDiv = document.getElementById('api-json');
+            const imageDiv = document.getElementById('api-image-preview');
+
+            if (!fileInput.files[0]) {
+                alert('Please select an image file first!');
+                return;
+            }
+
+            // Show loading
+            spinner.classList.remove('d-none');
+            
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+
+            fetch('/api/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading
+                spinner.classList.add('d-none');
+                
+                // Show results
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Show image preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imageDiv.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded" alt="Uploaded Image" style="max-height: 300px;">`;
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            })
+            .catch(error => {
+                spinner.classList.add('d-none');
+                jsonDiv.textContent = `Error: ${error.message}`;
+                resultsDiv.style.display = 'block';
+            });
+        }
+
+        // Test Debug Prediction endpoint
+        function testDebugPredict() {
+            const fileInput = document.getElementById('debug-file');
+            const spinner = document.getElementById('debug-spinner');
+            const resultsDiv = document.getElementById('debug-results');
+            const jsonDiv = document.getElementById('debug-json');
+            const imageDiv = document.getElementById('debug-image-preview');
+
+            if (!fileInput.files[0]) {
+                alert('Please select an image file first!');
+                return;
+            }
+
+            // Show loading
+            spinner.classList.remove('d-none');
+            
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+
+            fetch('/api/debug/prediction', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading
+                spinner.classList.add('d-none');
+                
+                // Show results
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Show image preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imageDiv.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded" alt="Uploaded Image" style="max-height: 300px;">`;
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            })
+            .catch(error => {
+                spinner.classList.add('d-none');
+                jsonDiv.textContent = `Error: ${error.message}`;
+                resultsDiv.style.display = 'block';
+            });
+        }
+
+        // Test other endpoints
+        function testEndpoint(endpoint) {
+            const resultsDiv = document.getElementById('quick-test-results');
+            const jsonDiv = document.getElementById('quick-json');
+
+            fetch(endpoint)
+            .then(response => response.json())
+            .then(data => {
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = `Error: ${error.message}`;
+            });
+        }
+    </script>
+</body>
+</html>

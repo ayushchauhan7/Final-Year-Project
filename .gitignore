@@ -4,6 +4,7 @@ dist/
 trained_models
 uploads/
 models/
+output/
 
 # Python Virtual Environment
 venv/

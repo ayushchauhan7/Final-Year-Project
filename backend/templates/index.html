@@ -86,6 +86,13 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="debug-tab" data-bs-toggle="tab" data-bs-target="#debug" type="button">Debug API</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="batch-tab" data-bs-toggle="tab" data-bs-target="#batch" type="button">Batch API</button>
+            </li>
+            <!-- Add this new tab in the navigation -->
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="results-tab" data-bs-toggle="tab" data-bs-target="#results" type="button">Research Results</button>
+            </li>
         </ul>
 
         <div class="tab-content" id="myTabContent">
@@ -173,26 +180,133 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Batch API Tab -->
+            <div class="tab-pane fade" id="batch" role="tabpanel">
+                <div class="card shadow p-4 mt-4" style="border-left: 4px solid #fd7e14;">
+                    <h4 class="text-warning">📚 Batch Prediction Endpoint</h4>
+                    <p class="text-muted">Test <code>/api/predict/batch</code> endpoint with multiple images</p>
+                    <form id="batch-form">
+                        <div class="mb-3">
+                            <label for="batch-files" class="form-label">Select Multiple MRI Images:</label>
+                            <input type="file" class="form-control" id="batch-files" accept="image/*" multiple required>
+                            <small class="text-muted">Hold Ctrl/Cmd to select multiple images</small>
+                        </div>
+                        <button type="button" class="btn btn-warning" onclick="testBatchPredict()">
+                            <span id="batch-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                            Test Batch Prediction
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Batch Results -->
+                <div id="batch-results" class="mt-4" style="display: none;">
+                    <div class="card shadow">
+                        <div class="card-body">
+                            <h4 class="card-title text-warning">📊 Batch Response</h4>
+                            <div id="batch-json" class="json-output"></div>
+                            <div id="batch-image-preview" class="mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Research Results Tab (Newly Added) -->
+            <div class="tab-pane fade" id="results" role="tabpanel">
+                <div class="card shadow p-4 mt-4" style="border-left: 4px solid #28a745;">
+                    <h4 class="text-success">📊 Research Results & Analytics</h4>
+                    <p class="text-muted">Test research endpoints for charts and statistical analysis</p>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>📈 Charts Generation</h5>
+                            <p><code>/api/results/charts</code> - Generate research visualizations</p>
+                            <button type="button" class="btn btn-success" onclick="testChartsGeneration()">
+                                <span id="charts-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                                Generate Research Charts
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>📊 Statistical Analysis</h5>
+                            <p><code>/api/results/statistics</code> - Get detailed statistics</p>
+                            <button type="button" class="btn btn-info" onclick="testStatisticsGeneration()">
+                                <span id="stats-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                                Generate Statistics
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <strong>Note:</strong> These endpoints generate research-ready charts and statistics based on your prediction history. 
+                            Make sure you have made some predictions first using the other tabs.
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Charts Results -->
+                <div id="charts-results" class="mt-4" style="display: none;">
+                    <div class="card shadow">
+                        <div class="card-body">
+                            <h4 class="card-title text-success">📊 Generated Charts</h4>
+                            <div id="charts-display" class="row"></div>
+                            <div class="mt-3">
+                                <h5>Raw JSON Response:</h5>
+                                <div id="charts-json" class="json-output"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Results -->
+                <div id="statistics-results" class="mt-4" style="display: none;">
+                    <div class="card shadow">
+                        <div class="card-body">
+                            <h4 class="card-title text-info">📈 Statistical Analysis</h4>
+                            <div id="statistics-json" class="json-output"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Quick API Info -->
         <div class="card shadow p-4 mt-4">
             <h5 class="text-secondary">Quick API Reference</h5>
             <div class="row">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <strong>Standard Endpoints:</strong>
                     <ul class="list-unstyled mt-2">
                         <li><code>GET /</code> - API Documentation</li>
                         <li><code>GET /api/health</code> - Health Check</li>
                         <li><code>GET /api/classes</code> - Available Classes</li>
                         <li><code>GET /api/model/info</code> - Model Info</li>
+                        <li><code>GET /api/analytics/summary</code> - Analytics</li>
+                        <li><code>GET /api/predictions/history</code> - History</li>
                     </ul>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
+                    <strong>POST Endpoints:</strong>
+                    <ul class="list-unstyled mt-2">
+                        <li><code>POST /api/predict</code> - Single Image</li>
+                        <li><code>POST /api/predict/batch</code> - Multiple Images</li>
+                        <li><code>POST /api/debug/prediction</code> - Debug Analysis</li>
+                    </ul>
+                    <strong>Research Endpoints:</strong> <!-- New -->
+                    <ul class="list-unstyled mt-2">
+                        <li><code>GET /api/results/charts</code> - Research Charts</li>
+                        <li><code>GET /api/results/statistics</code> - Statistics</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
                     <strong>Test These Endpoints:</strong>
-                    <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/health')">Test Health</button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/classes')">Test Classes</button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/model/info')">Test Model Info</button>
+                    <div class="d-grid gap-1">
+                        <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/health')">Test Health</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/classes')">Test Classes</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="testEndpoint('/api/model/info')">Test Model Info</button>
+                        <button class="btn btn-sm btn-outline-success" onclick="testEndpoint('/api/results/statistics')">Test Statistics</button> <!-- New -->
+                        <button class="btn btn-sm btn-outline-info" onclick="testChartsGeneration()">Generate Charts</button> <!-- New -->
+                    </div>
                 </div>
             </div>
             <div id="quick-test-results" class="mt-3" style="display: none;">
@@ -295,6 +409,189 @@
             });
         }
 
+        // Enhanced Batch Prediction with Image Previews
+        function testBatchPredict() {
+            const fileInput = document.getElementById('batch-files');
+            const spinner = document.getElementById('batch-spinner');
+            const resultsDiv = document.getElementById('batch-results');
+            const jsonDiv = document.getElementById('batch-json');
+            const imageDiv = document.getElementById('batch-image-preview');
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Please select multiple image files first!');
+                return;
+            }
+
+            // Show loading
+            spinner.classList.remove('d-none');
+            
+            // Show image previews immediately while processing
+            showImagePreviews(fileInput.files, imageDiv);
+            
+            const formData = new FormData();
+            
+            // Append all selected files
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append('images', fileInput.files[i]);
+            }
+
+            fetch('/api/predict/batch', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading
+                spinner.classList.add('d-none');
+                
+                // Show results
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Update images with results
+                showImagePreviewsWithResults(fileInput.files, data, imageDiv);
+            })
+            .catch(error => {
+                spinner.classList.add('d-none');
+                jsonDiv.textContent = `Error: ${error.message}`;
+                resultsDiv.style.display = 'block';
+                
+                // Show error
+                imageDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6>❌ Error processing images</h6>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            });
+        }
+
+        // Helper function to show image previews
+        function showImagePreviews(files, containerDiv) {
+            let previewHtml = `
+                <h6>Processing ${files.length} images...</h6>
+                <div class="row" id="image-preview-container">
+            `;
+            
+            containerDiv.innerHTML = previewHtml;
+            
+            const maxPreviews = Math.min(files.length, 6);
+            let loadedCount = 0;
+            
+            for (let i = 0; i < maxPreviews; i++) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const imageHtml = `
+                        <div class="col-md-4 col-sm-6 mb-3" id="image-${i}">
+                            <div class="card">
+                                <img src="${e.target.result}" class="card-img-top" style="height: 150px; object-fit: cover;">
+                                <div class="card-body p-2">
+                                    <h6 class="card-title text-truncate" style="font-size: 0.8rem;">${files[i].name}</h6>
+                                    <p class="card-text">
+                                        <small class="text-muted">${(files[i].size / 1024).toFixed(1)} KB</small><br>
+                                        <span class="badge bg-warning">Processing...</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.getElementById('image-preview-container').innerHTML += imageHtml;
+                    
+                    loadedCount++;
+                    if (loadedCount === maxPreviews) {
+                        if (files.length > maxPreviews) {
+                            document.getElementById('image-preview-container').innerHTML += `
+                                <div class="col-12">
+                                    <small class="text-muted">... and ${files.length - maxPreviews} more images</small>
+                                </div>
+                            `;
+                        }
+                        containerDiv.innerHTML += '</div>';
+                    }
+                };
+                reader.readAsDataURL(files[i]);
+            }
+        }
+
+        // Helper function to show previews with results
+        function showImagePreviewsWithResults(files, apiResponse, containerDiv) {
+            let previewHtml = `
+                <h6>✅ Processed ${files.length} images - Results:</h6>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="alert alert-info p-2">
+                            <strong>Total:</strong> ${apiResponse.total_images || files.length}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="alert alert-danger p-2">
+                            <strong>Tumors:</strong> ${apiResponse.batch_summary?.tumor_detected || 0}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="alert alert-success p-2">
+                            <strong>Normal:</strong> ${apiResponse.batch_summary?.no_tumor || 0}
+                        </div>
+                    </div>
+                </div>
+                <div class="row" id="result-preview-container">
+            `;
+            
+            containerDiv.innerHTML = previewHtml;
+            
+            const maxPreviews = Math.min(files.length, 6);
+            let loadedCount = 0;
+            
+            for (let i = 0; i < maxPreviews; i++) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // Find corresponding result
+                    const result = apiResponse.results ? apiResponse.results.find(r => r.filename === files[i].name) : null;
+                    const prediction = result ? result.prediction : 'Unknown';
+                    const confidence = result ? result.confidence : 'N/A';
+                    const isTumor = prediction.includes('Tumor') && !prediction.includes('No Tumor');
+                    
+                    const imageHtml = `
+                        <div class="col-md-4 col-sm-6 mb-3">
+                            <div class="card ${isTumor ? 'border-danger' : 'border-success'}">
+                                <img src="${e.target.result}" class="card-img-top" style="height: 150px; object-fit: cover;">
+                                <div class="card-body p-2">
+                                    <h6 class="card-title text-truncate" style="font-size: 0.8rem;" title="${files[i].name}">
+                                        ${files[i].name}
+                                </h6>
+                                    <p class="card-text">
+                                        <span class="badge ${isTumor ? 'bg-danger' : 'bg-success'}" style="font-size: 0.7rem;">
+                                            ${prediction}
+                                        </span><br>
+                                        <small class="text-muted">Confidence: ${confidence}</small><br>
+                                        <small class="text-muted">${(files[i].size / 1024).toFixed(1)} KB</small>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.getElementById('result-preview-container').innerHTML += imageHtml;
+                    
+                    loadedCount++;
+                    if (loadedCount === maxPreviews) {
+                        if (files.length > maxPreviews) {
+                            document.getElementById('result-preview-container').innerHTML += `
+                                <div class="col-12">
+                                    <div class="alert alert-info">
+                                        <small>Showing first ${maxPreviews} of ${files.length} processed images. All results are included in the JSON response above.</small>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                        containerDiv.innerHTML += '</div>';
+                    }
+                };
+                reader.readAsDataURL(files[i]);
+            }
+        }
+
         // Test other endpoints
         function testEndpoint(endpoint) {
             const resultsDiv = document.getElementById('quick-test-results');
@@ -310,6 +607,125 @@
                 resultsDiv.style.display = 'block';
                 jsonDiv.textContent = `Error: ${error.message}`;
             });
+        }
+
+        // Test Charts Generation
+        function testChartsGeneration() {
+            const spinner = document.getElementById('charts-spinner');
+            const resultsDiv = document.getElementById('charts-results');
+            const chartsDisplay = document.getElementById('charts-display');
+            const jsonDiv = document.getElementById('charts-json');
+
+            // Show loading
+            spinner.classList.remove('d-none');
+            
+            fetch('/api/results/charts')
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading
+                spinner.classList.add('d-none');
+                
+                // Show results
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Display charts if available
+                if (data.charts) {
+                    let chartsHtml = '';
+                    Object.entries(data.charts).forEach(([chartName, chartBase64]) => {
+                        const chartTitle = chartName.replace(/_/g, ' ').toUpperCase();
+                        chartsHtml += `
+                            <div class="col-md-6 mb-4">
+                                <div class="card">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0">${chartTitle}</h6>
+                                    </div>
+                                    <div class="card-body text-center">
+                                        <img src="data:image/png;base64,${chartBase64}" 
+                                             class="img-fluid" 
+                                             alt="${chartTitle}"
+                                             style="max-height: 300px; cursor: pointer;"
+                                             onclick="openImageModal('${chartBase64}', '${chartTitle}')">
+                                        <br>
+                                        <small class="text-muted">Click to enlarge</small>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    chartsDisplay.innerHTML = chartsHtml;
+                }
+            })
+            .catch(error => {
+                spinner.classList.add('d-none');
+                jsonDiv.textContent = `Error: ${error.message}`;
+                resultsDiv.style.display = 'block';
+            });
+        }
+
+        // Test Statistics Generation
+        function testStatisticsGeneration() {
+            const spinner = document.getElementById('stats-spinner');
+            const resultsDiv = document.getElementById('statistics-results');
+            const jsonDiv = document.getElementById('statistics-json');
+
+            // Show loading
+            spinner.classList.remove('d-none');
+            
+            fetch('/api/results/statistics')
+            .then(response => response.json())
+            .then(data => {
+                // Hide loading
+                spinner.classList.add('d-none');
+                
+                // Show results
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                spinner.classList.add('d-none');
+                jsonDiv.textContent = `Error: ${error.message}`;
+                resultsDiv.style.display = 'block';
+            });
+        }
+
+        // Helper function to open image in modal (for chart enlargement)
+        function openImageModal(base64Data, title) {
+            // Create modal HTML
+            const modalHtml = `
+                <div class="modal fade" id="chartModal" tabindex="-1">
+                    <div class="modal-dialog modal-xl">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">${title}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <img src="data:image/png;base64,${base64Data}" class="img-fluid" alt="${title}">
+                            </div>
+                            <div class="modal-footer">
+                                <a href="data:image/png;base64,${base64Data}" download="${title}.png" class="btn btn-success">
+                                    Download Chart
+                                </a>
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('chartModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add new modal
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('chartModal'));
+            modal.show();
         }
     </script>
 </body>

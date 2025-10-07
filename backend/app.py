@@ -15,6 +15,7 @@ from keras.preprocessing.image import load_img, img_to_array
 import numpy as np
 import os
 import datetime
+from werkzeug.utils import secure_filename  # Import secure_filename
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -151,43 +152,62 @@ def get_uploaded_file(filename):
 # === NEW API ENDPOINTS ===
 
 @app.route('/api/predict', methods=['POST'])
-def api_predict():
+def predict():
     try:
         if 'image' not in request.files:
-            return jsonify({"error": "No image provided"}), 400
+            return jsonify({'error': 'No image file provided'}), 400
         
         file = request.files['image']
         if file.filename == '':
-            return jsonify({"error": "No image selected"}), 400
-        
-        # Save file
-        file_location = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        file.save(file_location)
-        
-        # Predict
-        result, confidence, all_predictions = predict_tumor(file_location)
-        
-        # Store in history
-        prediction_history.append({
-            "timestamp": datetime.datetime.now().isoformat(),
-            "filename": file.filename,
-            "result": result,
-            "confidence": float(confidence),  # Convert to Python float
-            "method": "api"
-        })
-        
-        return jsonify({
-            "prediction": result,
-            "confidence": f"{confidence*100:.2f}%",
-            "confidence_score": float(confidence),
-            "probabilities": {
-                class_labels[i]: float(all_predictions[i]) for i in range(len(class_labels))
+            return jsonify({'error': 'No file selected'}), 400
+
+        # Save uploaded file
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+
+        # Load and preprocess image
+        img = load_img(filepath, target_size=(128, 128))
+        img_array = img_to_array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+
+        # Make prediction
+        predictions = model.predict(img_array)
+        predicted_class_index = np.argmax(predictions[0])
+        predicted_class = class_labels[predicted_class_index]
+        confidence_score = float(predictions[0][predicted_class_index])  # IMPORTANT: Convert to float
+
+        # FIXED: Ensure confidence is properly formatted
+        response_data = {
+            'prediction': predicted_class,
+            'confidence': confidence_score,  # This should be between 0 and 1
+            'confidence_percentage': round(confidence_score * 100, 2),  # Add this for clarity
+            'all_predictions': {
+                class_labels[i]: float(predictions[0][i]) 
+                for i in range(len(class_labels))
             },
-            "filename": file.filename
-        })
+            'filename': filename,
+            'timestamp': datetime.datetime.now().isoformat()
+        }
         
+        # Add to prediction history
+        prediction_history.append({
+            'prediction': predicted_class,
+            'confidence': confidence_score,
+            'result': predicted_class,  # For analytics
+            'method': 'web_interface',
+            'timestamp': datetime.datetime.now().isoformat(),
+            'filename': filename
+        })
+
+        # DEBUG: Print to console to verify
+        print(f"DEBUG - Prediction: {predicted_class}, Confidence: {confidence_score}")
+        
+        return jsonify(response_data)
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"ERROR in predict endpoint: {str(e)}")  # DEBUG
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
 def api_health():

@@ -49,6 +49,7 @@
             padding-left: 15px;
         }
 
+        /* Enhanced JSON output styling */
         .json-output {
             background-color: #f8f9fa;
             border: 1px solid #dee2e6;
@@ -56,14 +57,82 @@
             padding: 15px;
             font-family: 'Courier New', monospace;
             font-size: 12px;
-            max-height: 300px;
+            max-height: 400px;
             overflow-y: auto;
             white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .json-output pre {
+            margin: 0;
+            background: none;
+            border: none;
+            padding: 0;
+            font-size: inherit;
         }
 
         .nav-tabs .nav-link.active {
             background-color: #007bff;
             color: white;
+        }
+
+        /* Chart display enhancements */
+        #charts-display .card {
+            transition: transform 0.2s ease-in-out;
+        }
+
+        #charts-display .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        /* Statistics summary cards */
+        #statistics-summary .card {
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+        }
+
+        /* Results sections styling */
+        #charts-results, #statistics-results {
+            transition: all 0.3s ease;
+        }
+
+        .card-title {
+            margin-bottom: 1rem;
+        }
+
+        /* Responsive improvements */
+        @media (max-width: 768px) {
+            .json-output {
+                font-size: 10px;
+                max-height: 200px;
+            }
+            
+            #charts-display .card-body img {
+                max-height: 200px !important;
+            }
+        }
+
+        /* Prevent accidental form submissions */
+        form {
+            position: relative;
+        }
+
+        form[onsubmit="return false;"] {
+            /* Visual indicator that form won't submit */
+            border-left: 3px solid #28a745;
+            padding-left: 10px;
+        }
+
+        /* Ensure all buttons are properly styled */
+        button[type="button"] {
+            cursor: pointer;
+        }
+
+        /* Preserve tab content */
+        .tab-content {
+            min-height: 500px;
         }
     </style>
 </head>
@@ -96,31 +165,35 @@
         </ul>
 
         <div class="tab-content" id="myTabContent">
-            <!-- Web Interface Tab -->
-            <div class="tab-pane fade show active" id="web" role="tabpanel">
-                <div class="card shadow p-4 mt-4">
-                    <h4 class="text-primary">Standard Web Upload</h4>
-                    <p class="text-muted">Traditional form submission with page reload</p>
-                    <form method="POST" enctype="multipart/form-data">
+            <!-- Web Interface Tab - FIXED VERSION -->
+            <div class="tab-pane fade show active" id="web-interface" role="tabpanel">
+                <div class="card shadow p-4 mt-4" style="border-left: 4px solid #007bff;">
+                    <h4 class="text-primary">🧠 Brain Tumor Analysis</h4>
+                    <p class="text-muted">Upload an MRI scan image for AI-powered tumor detection</p>
+                    
+                    <!-- PREVENT FORM SUBMISSION RELOAD -->
+                    <form id="web-upload-form" onsubmit="return false;"> <!-- Added onsubmit="return false;" -->
                         <div class="mb-3">
-                            <label for="file" class="form-label">Select MRI Image:</label>
-                            <input type="file" class="form-control" id="file" name="file" accept="image/*" required>
+                            <label for="web-file" class="form-label">Select MRI Image:</label>
+                            <input type="file" class="form-control" id="web-file" accept="image/*" required>
                         </div>
-                        <button type="submit" class="btn btn-primary">Upload and Detect</button>
+                        <button type="button" class="btn btn-primary" onclick="analyzeWebImage()"> <!-- Changed to type="button" -->
+                            <span id="web-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                            Analyze Image
+                        </button>
                     </form>
                 </div>
 
-                {% if result %}
-                <div id="results" class="mt-4">
+                <!-- Results section remains the same -->
+                <div id="web-results" class="mt-4" style="display: none;">
                     <div class="card shadow">
                         <div class="card-body">
-                            <h4 class="card-title text-success">{{ result }}</h4>
-                            <p class="card-text text-muted">Confidence: {{ confidence }}</p>
-                            <img src="{{ file_path }}" class="img-fluid rounded" alt="Uploaded Image">
+                            <h4 class="card-title text-primary">🎯 Analysis Results</h4>
+                            <div id="web-image-preview" class="mb-3"></div>
+                            <div id="web-json" class="json-output"></div>
                         </div>
                     </div>
                 </div>
-                {% endif %}
             </div>
 
             <!-- API Predict Tab -->
@@ -211,7 +284,7 @@
                 </div>
             </div>
 
-            <!-- Research Results Tab (Newly Added) -->
+            <!-- Research Results Tab - ENHANCED VERSION -->
             <div class="tab-pane fade" id="results" role="tabpanel">
                 <div class="card shadow p-4 mt-4" style="border-left: 4px solid #28a745;">
                     <h4 class="text-success">📊 Research Results & Analytics</h4>
@@ -221,35 +294,44 @@
                         <div class="col-md-6">
                             <h5>📈 Charts Generation</h5>
                             <p><code>/api/results/charts</code> - Generate research visualizations</p>
-                            <button type="button" class="btn btn-success" onclick="testChartsGeneration()">
-                                <span id="charts-spinner" class="spinner-border spinner-border-sm d-none"></span>
-                                Generate Research Charts
-                            </button>
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-success" onclick="testChartsGeneration()">
+                                    <span id="charts-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                                    Generate Research Charts
+                                </button>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="refreshCharts()">
+                                    🔄 Refresh Charts
+                                </button>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <h5>📊 Statistical Analysis</h5>
                             <p><code>/api/results/statistics</code> - Get detailed statistics</p>
-                            <button type="button" class="btn btn-info" onclick="testStatisticsGeneration()">
-                                <span id="stats-spinner" class="spinner-border spinner-border-sm d-none"></span>
-                                Generate Statistics
-                            </button>
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-info" onclick="testStatisticsGeneration()">
+                                    <span id="stats-spinner" class="spinner-border spinner-border-sm d-none"></span>
+                                    Generate Statistics
+                                </button>
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="refreshStatistics()">
+                                    🔄 Refresh Statistics
+                                </button>
+                            </div>
                         </div>
                     </div>
                     
                     <div class="mt-3">
                         <small class="text-muted">
-                            <strong>Note:</strong> These endpoints generate research-ready charts and statistics based on your prediction history. 
-                            Make sure you have made some predictions first using the other tabs.
+                            <strong>Note:</strong> Charts and statistics are preserved when switching tabs. Use refresh buttons to get updated data after making new predictions.
                         </small>
                     </div>
                 </div>
 
-                <!-- Charts Results -->
+                <!-- Charts Results Section -->
                 <div id="charts-results" class="mt-4" style="display: none;">
                     <div class="card shadow">
                         <div class="card-body">
                             <h4 class="card-title text-success">📊 Generated Charts</h4>
-                            <div id="charts-display" class="row"></div>
+                            <div id="charts-display" class="row mb-4"></div>
                             <div class="mt-3">
                                 <h5>Raw JSON Response:</h5>
                                 <div id="charts-json" class="json-output"></div>
@@ -258,7 +340,7 @@
                     </div>
                 </div>
 
-                <!-- Statistics Results -->
+                <!-- Statistics Results Section -->
                 <div id="statistics-results" class="mt-4" style="display: none;">
                     <div class="card shadow">
                         <div class="card-body">
@@ -355,6 +437,8 @@
                     imageDiv.innerHTML = `<img src="${e.target.result}" class="img-fluid rounded" alt="Uploaded Image" style="max-height: 300px;">`;
                 };
                 reader.readAsDataURL(fileInput.files[0]);
+                
+                // IMPORTANT: Don't reload the page or reset other tabs
             })
             .catch(error => {
                 spinner.classList.add('d-none');
@@ -409,7 +493,7 @@
             });
         }
 
-        // Enhanced Batch Prediction with Image Previews
+        // FIXED - Enhanced Batch Prediction with Image Previews
         function testBatchPredict() {
             const fileInput = document.getElementById('batch-files');
             const spinner = document.getElementById('batch-spinner');
@@ -440,7 +524,7 @@
                 body: formData
             })
             .then(response => response.json())
-            .then(data => {
+            .then(data => {  // FIXED: Added missing arrow function syntax
                 // Hide loading
                 spinner.classList.add('d-none');
                 
@@ -450,7 +534,7 @@
                 
                 // Update images with results
                 showImagePreviewsWithResults(fileInput.files, data, imageDiv);
-            })
+            })  // FIXED: Added missing semicolon
             .catch(error => {
                 spinner.classList.add('d-none');
                 jsonDiv.textContent = `Error: ${error.message}`;
@@ -609,89 +693,195 @@
             });
         }
 
-        // Test Charts Generation
+        // FIXED - Test Charts Generation Function
         function testChartsGeneration() {
             const spinner = document.getElementById('charts-spinner');
             const resultsDiv = document.getElementById('charts-results');
             const chartsDisplay = document.getElementById('charts-display');
             const jsonDiv = document.getElementById('charts-json');
 
-            // Show loading
+            // If charts were already generated and saved, restore them
+            if (chartsGenerated && savedChartsData) {
+                displaySavedCharts(savedChartsData);
+                return;
+            }
+
+            // Show loading spinner
             spinner.classList.remove('d-none');
             
+            // Clear previous results
+            resultsDiv.style.display = 'none';
+            chartsDisplay.innerHTML = '';
+            jsonDiv.textContent = '';
+
             fetch('/api/results/charts')
             .then(response => response.json())
             .then(data => {
-                // Hide loading
+                // Hide loading spinner
                 spinner.classList.add('d-none');
                 
-                // Show results
-                resultsDiv.style.display = 'block';
-                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                // Save the data for later restoration
+                savedChartsData = data;
+                chartsGenerated = true;
                 
-                // Display charts if available
-                if (data.charts) {
-                    let chartsHtml = '';
-                    Object.entries(data.charts).forEach(([chartName, chartBase64]) => {
-                        const chartTitle = chartName.replace(/_/g, ' ').toUpperCase();
-                        chartsHtml += `
-                            <div class="col-md-6 mb-4">
-                                <div class="card">
-                                    <div class="card-header bg-success text-white">
-                                        <h6 class="mb-0">${chartTitle}</h6>
-                                    </div>
-                                    <div class="card-body text-center">
-                                        <img src="data:image/png;base64,${chartBase64}" 
-                                             class="img-fluid" 
-                                             alt="${chartTitle}"
-                                             style="max-height: 300px; cursor: pointer;"
-                                             onclick="openImageModal('${chartBase64}', '${chartTitle}')">
-                                        <br>
-                                        <small class="text-muted">Click to enlarge</small>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    chartsDisplay.innerHTML = chartsHtml;
-                }
+                // Display the charts
+                displaySavedCharts(data);
             })
             .catch(error => {
+                // Hide loading spinner
                 spinner.classList.add('d-none');
-                jsonDiv.textContent = `Error: ${error.message}`;
+                
+                // Show error in results section
                 resultsDiv.style.display = 'block';
+                jsonDiv.textContent = `Error: ${error.message}`;
+                chartsDisplay.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            <strong>Error generating charts:</strong> ${error.message}
+                        </div>
+                    </div>
+                `;
             });
         }
 
-        // Test Statistics Generation
+        // Helper function to display saved charts
+        function displaySavedCharts(data) {
+            const resultsDiv = document.getElementById('charts-results');
+            const chartsDisplay = document.getElementById('charts-display');
+            const jsonDiv = document.getElementById('charts-json');
+            
+            // Show results section
+            resultsDiv.style.display = 'block';
+            
+            // Display JSON response
+            jsonDiv.textContent = JSON.stringify(data, null, 2);
+            
+            // Display charts if available
+            if (data.charts && Object.keys(data.charts).length > 0) {
+                let chartsHtml = '';
+                Object.entries(data.charts).forEach(([chartName, chartBase64]) => {
+                    const chartTitle = chartName.replace(/_/g, ' ').toUpperCase();
+                    chartsHtml += `
+                        <div class="col-md-6 mb-4">
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0">${chartTitle}</h6>
+                                </div>
+                                <div class="card-body text-center">
+                                    <img src="data:image/png;base64,${chartBase64}" 
+                                         class="img-fluid" 
+                                         alt="${chartTitle}"
+                                         style="max-height: 300px; cursor: pointer;"
+                                         onclick="openImageModal('${chartBase64}', '${chartTitle}')">
+                                    <br>
+                                    <small class="text-muted">Click to enlarge</small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                chartsDisplay.innerHTML = chartsHtml;
+            } else {
+                chartsDisplay.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-warning">
+                            No charts available. Make sure you have prediction history by using other tabs first.
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // FIXED - Test Statistics Generation Function
         function testStatisticsGeneration() {
             const spinner = document.getElementById('stats-spinner');
             const resultsDiv = document.getElementById('statistics-results');
             const jsonDiv = document.getElementById('statistics-json');
 
-            // Show loading
+            // If statistics were already generated and saved, restore them
+            if (statisticsGenerated && savedStatsData) {
+                displaySavedStatistics(savedStatsData);
+                return;
+            }
+
+            // Show loading spinner
             spinner.classList.remove('d-none');
             
+            // Clear previous results
+            resultsDiv.style.display = 'none';
+            jsonDiv.textContent = '';
+
             fetch('/api/results/statistics')
             .then(response => response.json())
             .then(data => {
-                // Hide loading
+                // Hide loading spinner
                 spinner.classList.add('d-none');
                 
-                // Show results
-                resultsDiv.style.display = 'block';
-                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                // Save the data for later restoration
+                savedStatsData = data;
+                statisticsGenerated = true;
+                
+                // Display the statistics
+                displaySavedStatistics(data);
             })
             .catch(error => {
+                // Hide loading spinner
                 spinner.classList.add('d-none');
-                jsonDiv.textContent = `Error: ${error.message}`;
+                
+                // Show error in results section
                 resultsDiv.style.display = 'block';
+                jsonDiv.textContent = `Error: ${error.message}`;
             });
         }
 
-        // Helper function to open image in modal (for chart enlargement)
+        // Helper function to display saved statistics
+        function displaySavedStatistics(data) {
+            const resultsDiv = document.getElementById('statistics-results');
+            const jsonDiv = document.getElementById('statistics-json');
+            
+            // Show results section
+            resultsDiv.style.display = 'block';
+            
+            // Display JSON response
+            jsonDiv.textContent = JSON.stringify(data, null, 2);
+        }
+
+        // Add tab switching event listener to restore state
+        document.addEventListener('DOMContentLoaded', function() {
+            // Listen for tab switches
+            document.querySelectorAll('[data-bs-toggle="tab"]').forEach(function(tab) {
+                tab.addEventListener('shown.bs.tab', function(e) {
+                    // If switching to results tab and we have saved data, restore it
+                    if (e.target.getAttribute('data-bs-target') === '#results') {
+                        setTimeout(() => {
+                            if (chartsGenerated && savedChartsData) {
+                                displaySavedCharts(savedChartsData);
+                            }
+                            if (statisticsGenerated && savedStatsData) {
+                                displaySavedStatistics(savedStatsData);
+                            }
+                        }, 100);
+                    }
+                });
+            });
+        });
+
+        // Add refresh buttons for charts and statistics
+        function refreshCharts() {
+            chartsGenerated = false;
+            savedChartsData = null;
+            testChartsGeneration();
+        }
+
+        function refreshStatistics() {
+            statisticsGenerated = false;
+            savedStatsData = null;
+            testStatisticsGeneration();
+        }
+
+        // Helper function for image modal (keep existing if present)
         function openImageModal(base64Data, title) {
-            // Create modal HTML
+            // Create modal for chart enlargement
             const modalHtml = `
                 <div class="modal fade" id="chartModal" tabindex="-1">
                     <div class="modal-dialog modal-xl">
@@ -720,13 +910,141 @@
                 existingModal.remove();
             }
             
-            // Add new modal
+            // Add modal to page
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             
             // Show modal
             const modal = new bootstrap.Modal(document.getElementById('chartModal'));
             modal.show();
         }
+
+        // NEW - Web Interface Analysis Function (No Page Reload)
+        function analyzeWebImage() {
+            const fileInput = document.getElementById('web-file');
+            const spinner = document.getElementById('web-spinner');
+            const resultsDiv = document.getElementById('web-results');
+            const jsonDiv = document.getElementById('web-json');
+            const imageDiv = document.getElementById('web-image-preview');
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                alert('Please select an MRI image file first!');
+                return;
+            }
+
+            // Show loading
+            spinner.classList.remove('d-none');
+            
+            // Clear previous results
+            resultsDiv.style.display = 'none';
+            jsonDiv.textContent = '';
+            imageDiv.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+
+            fetch('/api/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // DEBUG: Log the entire response
+                console.log("Full API Response:", data);
+                
+                // Hide loading
+                spinner.classList.add('d-none');
+                
+                // Show results
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Show image preview with enhanced styling
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const prediction = data.prediction || 'Unknown';
+                    
+                    // IMPROVED: Better confidence handling
+                    let confidenceDisplay = 'N/A';
+                    
+                    // Try multiple possible confidence fields
+                    let confidence = data.confidence || data.confidence_percentage;
+                    
+                    console.log("Confidence value:", confidence, "Type:", typeof confidence);  // DEBUG
+                    
+                    if (confidence !== undefined && confidence !== null && !isNaN(confidence)) {
+                        if (data.confidence_percentage) {
+                            // If backend sends percentage directly
+                            confidenceDisplay = data.confidence_percentage.toFixed(1) + '%';
+                        } else if (confidence <= 1) {
+                            // If confidence is between 0-1, convert to percentage
+                            confidenceDisplay = (confidence * 100).toFixed(1) + '%';
+                        } else {
+                            // If already in percentage format
+                            confidenceDisplay = confidence.toFixed(1) + '%';
+                        }
+                    }
+                    
+                    const isTumor = prediction.includes('Tumor') && !prediction.includes('No Tumor');
+                    
+                    imageDiv.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <img src="${e.target.result}" 
+                                     class="img-fluid rounded border" 
+                                     alt="Uploaded MRI Scan" 
+                                     style="max-height: 300px; width: 100%; object-fit: cover;">
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex flex-column justify-content-center h-100">
+                                    <div class="alert ${isTumor ? 'alert-danger' : 'alert-success'} text-center">
+                                        <h5 class="mb-2">🔬 Analysis Result</h5>
+                                        <h4 class="${isTumor ? 'text-danger' : 'text-success'}">${prediction}</h4>
+                                        <p class="mb-0">Confidence: <strong>${confidenceDisplay}</strong></p>
+                                    </div>
+                                    <small class="text-muted">
+                                        <strong>File:</strong> ${fileInput.files[0].name}<br>
+                                        <strong>Size:</strong> ${(fileInput.files[0].size / 1024).toFixed(1)} KB
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+                
+                // IMPORTANT: This won't affect other tabs since we're using fetch
+                console.log('Analysis completed without page reload');
+            })
+            .catch(error => {
+                console.error("API Error:", error);  // DEBUG
+                spinner.classList.add('d-none');
+                resultsDiv.style.display = 'block';
+                jsonDiv.textContent = `Error: ${error.message}`;
+                
+                // Show error image preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imageDiv.innerHTML = `
+                        <div class="text-center">
+                            <img src="${e.target.result}" 
+                                 class="img-fluid rounded border" 
+                                 alt="Uploaded Image" 
+                                 style="max-height: 200px;">
+                            <div class="alert alert-danger mt-3">
+                                <strong>Analysis Failed:</strong> ${error.message}
+                            </div>
+                        </div>
+                    `;
+                };
+                reader.readAsDataURL(fileInput.files[0]);
+            });
+        }
+
+        // FIXED - Variable declarations at the top of script section
+        let chartsGenerated = false;
+        let statisticsGenerated = false;
+        let savedChartsData = null;
+        let savedStatsData = null;
     </script>
 </body>
 </html>

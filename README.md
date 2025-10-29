@@ -446,12 +446,12 @@ The CNN model analyzes multiple aspects of MRI scans:
 
 **Abhay Tyagi**
 - GitHub: [@AbhayTyagi1195](https://https://github.com/AbhayTyagi1195)
-- LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/abhaytyagi1195/)
+- LinkedIn: [abhaytyagi1195](https://linkedin.com/in/abhaytyagi1195/)
 - Email: abhaytyagi957@gmail.com
 
 **Ayush Chauhan**
 - GitHub: [@ayushchauhan7](https://github.com/ayushchauhan7)
-- LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/ayushchauhan7/)
+- LinkedIn: [ayushchauhan7](https://linkedin.com/in/ayushchauhan7/)
 - Email: chauhan0007ayush@gmail.com
 
 **Project Link**: [https://github.com/ayushchauhan7/Final-Year-Project](https://github.com/ayushchauhan7/Final-Year-Project)

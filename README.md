@@ -22,10 +22,7 @@ An AI-powered web application for automated brain tumor detection and classifica
 - [API Documentation](#api-documentation)
 - [Model Details](#model-details)
 - [Results & Performance](#results--performance)
-- [Screenshots](#screenshots)
 - [Future Enhancements](#future-enhancements)
-- [Contributing](#contributing)
-- [License](#license)
 - [Contact](#contact)
 
 ---
@@ -426,25 +423,6 @@ The CNN model analyzes multiple aspects of MRI scans:
 - **Single Image**: ~1.2 seconds
 - **Batch (10 images)**: ~8.5 seconds
 - **Average Throughput**: ~7 images/second
-
----
-
-## 📸 Screenshots
-
-### Main Interface
-![Main Interface](docs/screenshots/main_interface.png)
-
-### Prediction Results
-![Prediction Results](docs/screenshots/prediction_results.png)
-
-### Batch Processing
-![Batch Processing](docs/screenshots/batch_processing.png)
-
-### Research Analytics
-![Analytics Dashboard](docs/screenshots/analytics_dashboard.png)
-
-### API Testing Interface
-![API Testing](docs/screenshots/api_testing.png)
 
 ---
 

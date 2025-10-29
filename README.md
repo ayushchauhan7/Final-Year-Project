@@ -1,10 +1,9 @@
 # 🧠 Medical Image Analysis System - Brain Tumor Detection
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/Flask-2.3.0-green.svg)](https://flask.palletsprojects.com/)
 [![React](https://img.shields.io/badge/React-18.2.0-61DAFB.svg)](https://reactjs.org/)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.12.0-FF6F00.svg)](https://www.tensorflow.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An AI-powered web application for automated brain tumor detection and classification from MRI scans using Deep Learning and Computer Vision.
 
@@ -110,7 +109,7 @@ The **Medical Image Analysis System** is a comprehensive full-stack application 
 ┌─────────────────────────────────────────────────────────────┐
 │                        CLIENT LAYER                          │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │         React Frontend (Port 3000)                   │  │
+│  │         React Frontend (Port 5173)                   │  │
 │  │  • Image Upload Interface                            │  │
 │  │  • Real-time Results Display                         │  │
 │  │  • Analytics Dashboard                               │  │
@@ -152,7 +151,7 @@ The **Medical Image Analysis System** is a comprehensive full-stack application 
 ## 🚀 Installation
 
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.11 or higher
 - Node.js 14+ and npm
 - Git
 
@@ -205,9 +204,9 @@ The **Medical Image Analysis System** is a comprehensive full-stack application 
 
 3. **Start the development server**
    ```bash
-   npm start
+   npm run dev
    ```
-   Application will open at `http://localhost:3000`
+   Application will open at `http://localhost:5173`
 
 ---
 
@@ -215,7 +214,7 @@ The **Medical Image Analysis System** is a comprehensive full-stack application 
 
 ### Web Interface
 
-1. **Navigate to** `http://localhost:3000`
+1. **Navigate to** `http://localhost:5173`
 2. **Upload an MRI scan** (JPG, PNG formats supported)
 3. **Click "Analyze Image"** to process
 4. **View results** with prediction and confidence score
@@ -463,56 +462,19 @@ The CNN model analyzes multiple aspects of MRI scans:
 - [ ] **Model Versioning** - Track model improvements
 - [ ] **Integration APIs** - DICOM support, HL7 FHIR
 
-### Technical Improvements
-- [ ] Model optimization for faster inference
-- [ ] Enhanced preprocessing pipeline
-- [ ] Transfer learning with larger datasets
-- [ ] Ensemble methods for improved accuracy
-- [ ] Real-time model monitoring
-- [ ] A/B testing framework
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. **Fork the repository**
-2. **Create a feature branch**
-   ```bash
-   git checkout -b feature/AmazingFeature
-   ```
-3. **Commit your changes**
-   ```bash
-   git commit -m 'Add some AmazingFeature'
-   ```
-4. **Push to the branch**
-   ```bash
-   git push origin feature/AmazingFeature
-   ```
-5. **Open a Pull Request**
-
-### Contribution Guidelines
-- Follow PEP 8 style guide for Python code
-- Use ESLint for JavaScript code
-- Write unit tests for new features
-- Update documentation for API changes
-- Add comments for complex logic
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ---
 
 ## 👨‍💻 Contact
 
 **Abhay Tyagi**
+- GitHub: [@AbhayTyagi1195](https://https://github.com/AbhayTyagi1195)
+- LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/abhaytyagi1195/)
+- Email: abhaytyagi957@gmail.com
+
+**Ayush Chauhan**
 - GitHub: [@ayushchauhan7](https://github.com/ayushchauhan7)
-- LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/yourprofile)
-- Email: your.email@example.com
+- LinkedIn: [Your LinkedIn Profile](https://linkedin.com/in/ayushchauhan7/)
+- Email: chauhan0007ayush@gmail.com
 
 **Project Link**: [https://github.com/ayushchauhan7/Final-Year-Project](https://github.com/ayushchauhan7/Final-Year-Project)
 
@@ -540,7 +502,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **⭐ Star this repository if you find it helpful!**
 
-Made with ❤️ by Abhay Tyagi
+Made with ❤️ by Abhay Tyagi and Ayush Chauhan.
 
 </div>
 

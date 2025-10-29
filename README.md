@@ -7,8 +7,6 @@
 
 An AI-powered web application for automated brain tumor detection and classification from MRI scans using Deep Learning and Computer Vision.
 
-![Project Banner](docs/banner.png)
-
 ---
 
 ## 📋 Table of Contents

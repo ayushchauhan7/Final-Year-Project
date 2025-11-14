@@ -301,7 +301,7 @@ Create `.env` file in `backend/` directory:
 # filepath: backend/.env
 
 # MongoDB Configuration
-MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/medical_image_analysis?retryWrites=true&w=majority
+MONGO_URI=YOUR-CONNECTION-STRING.
 
 # JWT Secret Key (change this to a random secure string)
 JWT_SECRET_KEY=your-super-secret-jwt-key-change-this-in-production-12345
@@ -1137,7 +1137,7 @@ sudo systemctl status mongod
 sudo systemctl start mongod
 
 # Or use MongoDB Atlas connection string in .env
-MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/
+MONGO_URI=YOUR-CONNECTION-STRING.
 ```
 
 ---

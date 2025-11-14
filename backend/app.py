@@ -16,18 +16,60 @@ import numpy as np
 import os
 import datetime
 from werkzeug.utils import secure_filename  # Import secure_filename
+from sklearn.metrics import confusion_matrix, classification_report
+from dotenv import load_dotenv
+from bson import ObjectId
+
+# Load environment variables
+load_dotenv()
+
+# Import authentication and database
+from routes.auth_routes import auth_bp
+from config.database import get_database
+from utils.auth import token_required, optional_token, decode_token
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+
+# Configuration from environment variables
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# CORS Configuration
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:5173').split(',')
+CORS(app, resources={
+    r"/api/*": {
+        "origins": allowed_origins,
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "expose_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})  # Enable CORS for all routes
+
+# Register authentication blueprint
+app.register_blueprint(auth_bp, url_prefix='/api/auth')
+
+# Create necessary directories
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs('models', exist_ok=True)
 
 # Load the trained model
-model = load_model('../notebooks/brain_tumor_model.h5')
+MODEL_PATH = 'models/brain_tumor_model.h5'
+model = None
+
+try:
+    model = load_model(MODEL_PATH)
+    print("✅ Model loaded successfully from:", MODEL_PATH)
+except Exception as e:
+    print(f"❌ Error loading model: {e}")
+    print("⚠️ Application will run but predictions will fail")
 
 # Class labels
-class_labels = ['glioma', 'meningioma' ,'notumor', 'pituitary']
+class_labels = ['glioma', 'meningioma', 'notumor', 'pituitary']
 
-# Define the uploads folder
+# Define the uploads folder (backwards compatibility)
 UPLOAD_FOLDER = './uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
@@ -37,8 +79,161 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 # Store prediction history (simple in-memory storage)
 prediction_history = []
 
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def get_tumor_information(prediction, confidence):
+    """Generate medical information based on prediction and confidence"""
+    confidence_value = float(confidence) if isinstance(confidence, (int, float)) else float(str(confidence).strip('%'))
+    
+    tumor_descriptions = {
+        'glioma': {
+            'name': 'Glioma Tumor',
+            'description': 'Gliomas are tumors that originate from glial cells in the brain or spine.',
+            'severity': 'High Risk',
+            'color': 'danger',
+            'icon': '⚠️',
+            'details': [
+                'Most common primary brain tumor in adults',
+                'Can be slow-growing (low-grade) or fast-growing (high-grade)',
+                'May cause headaches, seizures, and neurological symptoms',
+                'Treatment options include surgery, radiation, and chemotherapy'
+            ]
+        },
+        'meningioma': {
+            'name': 'Meningioma Tumor',
+            'description': 'Meningiomas develop from the meninges. Most are benign and slow-growing.',
+            'severity': 'Moderate Risk',
+            'color': 'warning',
+            'icon': '⚡',
+            'details': [
+                'Usually benign (non-cancerous) and slow-growing',
+                'More common in women than men',
+                'May not require immediate treatment if small',
+                'Treatment includes observation, surgery, or radiation'
+            ]
+        },
+        'pituitary': {
+            'name': 'Pituitary Tumor',
+            'description': 'Pituitary tumors form in the pituitary gland. Most are benign adenomas.',
+            'severity': 'Moderate Risk',
+            'color': 'info',
+            'icon': '🔬',
+            'details': [
+                'Usually benign (non-cancerous)',
+                'Can affect hormone levels and bodily functions',
+                'May cause vision problems if pressing on optic nerves',
+                'Treatment includes medication, surgery, or radiation'
+            ]
+        },
+        'notumor': {
+            'name': 'No Tumor Detected',
+            'description': 'The AI analysis indicates no signs of tumor in the MRI scan.',
+            'severity': 'Low Risk',
+            'color': 'success',
+            'icon': '✅',
+            'details': [
+                'No abnormal growth detected',
+                'Brain tissue appears within normal parameters',
+                'Continue regular health monitoring',
+                'Consult healthcare provider for any symptoms'
+            ]
+        }
+    }
+    
+    # Determine tumor type
+    tumor_type = 'notumor'
+    for key in tumor_descriptions.keys():
+        if key in prediction.lower():
+            tumor_type = key
+            break
+    
+    info = tumor_descriptions[tumor_type]
+    
+    # Confidence-based recommendations
+    if confidence_value >= 90:
+        confidence_level = 'Very High Confidence'
+        if tumor_type != 'notumor':
+            recommendations = [
+                '🏥 Immediate Action Required: Schedule urgent consultation',
+                '📋 Bring complete medical history to appointment',
+                '🔬 Additional diagnostic tests may be recommended'
+            ]
+        else:
+            recommendations = [
+                '✅ No Immediate Concerns: Results indicate healthy brain tissue',
+                '📅 Continue routine health check-ups',
+                '🧠 Maintain brain health through proper diet and exercise'
+            ]
+    elif confidence_value >= 70:
+        confidence_level = 'High Confidence'
+        recommendations = [
+            '🏥 Medical Consultation Advised: See a neurologist',
+            '📋 Request additional imaging for confirmation',
+            '📊 Compare with previous scans if available'
+        ]
+    elif confidence_value >= 50:
+        confidence_level = 'Moderate Confidence'
+        recommendations = [
+            '🔍 Further Investigation Needed',
+            '📋 Additional imaging recommended',
+            '👨‍⚕️ Consultation with specialist advised'
+        ]
+    else:
+        confidence_level = 'Low Confidence'
+        recommendations = [
+            '⚠️ Uncertain Results: AI analysis has low confidence',
+            '🔄 Repeat MRI scan recommended',
+            '👨‍⚕️ Professional radiologist review essential'
+        ]
+    
+    return {
+        **info,
+        'confidenceLevel': confidence_level,
+        'recommendations': recommendations,
+        'tumorType': tumor_type
+    }
+
+def save_prediction_to_db(user_info, prediction_data):
+    """Save prediction to MongoDB"""
+    try:
+        db = get_database()
+        
+        # Add user information
+        prediction_data['userId'] = ObjectId(user_info['user_id'])
+        prediction_data['username'] = user_info['username']
+        prediction_data['createdAt'] = datetime.datetime.utcnow()
+        
+        # Insert into database
+        result = db.predictions.insert_one(prediction_data)
+        
+        # Log the prediction
+        db.audit_logs.insert_one({
+            'userId': ObjectId(user_info['user_id']),
+            'username': user_info['username'],
+            'action': 'prediction',
+            'ipAddress': request.remote_addr,
+            'userAgent': request.headers.get('User-Agent'),
+            'timestamp': datetime.datetime.utcnow(),
+            'details': {
+                'predictionId': str(result.inserted_id),
+                'predictionType': prediction_data.get('predictionType'),
+                'tumorType': prediction_data.get('tumorType')
+            }
+        })
+        
+        return str(result.inserted_id)
+    except Exception as e:
+        print(f"Error saving to database: {e}")
+        return None
+
 # Helper function to predict tumor type
 def predict_tumor(image_path):
+    """Predict tumor from image"""
+    if model is None:
+        raise Exception("Model not loaded")
+    
     IMAGE_SIZE = 128
     img = load_img(image_path, target_size=(IMAGE_SIZE, IMAGE_SIZE))
     img_array = img_to_array(img) / 255.0  # Normalize pixel values
@@ -53,36 +248,64 @@ def predict_tumor(image_path):
     else:
         return f"Tumor: {class_labels[predicted_class_index]}", confidence_score, predictions[0]
 
+def clean_for_json(obj):
+    """Convert numpy types to Python types for JSON serialization"""
+    if isinstance(obj, dict):
+        return {key: clean_for_json(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_for_json(item) for item in obj]
+    elif hasattr(obj, 'item'):  # numpy types
+        return obj.item()
+    elif isinstance(obj, (np.float32, np.float64)):
+        return float(obj)
+    elif isinstance(obj, (np.int32, np.int64)):
+        return int(obj)
+    return obj
+
+# ============================================================================
+# EXISTING ROUTES (Unchanged)
+# ============================================================================
+
 # Route for the main page (index.html)
 @app.route('/', methods=['GET'])
 def index():
     # Display API documentation as JSON response on GET request
     api_info = {
         "title": "Brain Tumor Detection API",
-        "description": "Medical Image Analysis System for Brain Tumor Classification with Research Analytics",
-        "version": "2.0.0",  # Updated version
+        "description": "Medical Image Analysis System for Brain Tumor Classification with Research Analytics & Authentication",
+        "version": "2.0.0",  # Updated version with auth
+        "authentication": {
+            "required": "Yes - JWT Token required for predictions",
+            "endpoints": {
+                "/api/auth/register": "POST - Register new user",
+                "/api/auth/login": "POST - Login and get JWT token",
+                "/api/auth/verify": "GET - Verify token validity",
+                "/api/auth/logout": "POST - Logout user"
+            }
+        },
         "endpoints": {
             "/": "GET - API Documentation",
             "/test": "GET/POST - Web Interface for Testing",
-            "/api/predict": "POST - Analyze single brain scan image",
-            "/api/predict/batch": "POST - Analyze multiple brain scan images",
+            "/api/predict": "POST - Analyze single brain scan image [PROTECTED]",
+            "/api/predict/batch": "POST - Analyze multiple brain scan images [PROTECTED]",
             "/api/health": "GET - Health check and system status",
             "/api/classes": "GET - Available tumor classes",
             "/api/model/info": "GET - Model information and configuration",
             "/api/debug/prediction": "POST - Detailed prediction analysis",
             "/api/debug/class-order": "GET - Test different class interpretations",
-            "/api/analytics/summary": "GET - Prediction statistics",
-            "/api/predictions/history": "GET - Recent prediction history",
-            "/api/results/charts": "GET - Generate research charts and visualizations",  # New
-            "/api/results/statistics": "GET - Detailed statistical analysis for research",  # New
+            "/api/analytics/summary": "GET - Prediction statistics [PROTECTED]",
+            "/api/predictions/history": "GET - Recent prediction history [PROTECTED]",
+            "/api/results/charts": "GET - Generate research charts and visualizations",
+            "/api/results/statistics": "GET - Detailed statistical analysis for research",
             "/uploads/<filename>": "GET - Serve uploaded files"
         },
         "usage": {
+            "authentication_flow": "1. Register -> 2. Login -> 3. Use token in Authorization header",
             "web_interface": "Visit /test for file upload interface",
             "api_usage": "Use /api/* endpoints for programmatic access",
             "test_page": "/test serves as the web interface for testing",
             "batch_processing": "Use /api/predict/batch for multiple image analysis",
-            "research_analytics": "Use /api/results/* endpoints for research visualizations and statistics"  # New
+            "research_analytics": "Use /api/results/* endpoints for research visualizations and statistics"
         },
         "model_info": {
             "classes": class_labels,
@@ -90,14 +313,16 @@ def index():
             "model_type": "CNN with transfer learning"
         },
         "examples": {
-            "curl_predict": "curl -X POST -F 'image=@brain_scan.jpg' http://localhost:5000/api/predict",
-            "curl_batch": "curl -X POST -F 'images=@scan1.jpg' -F 'images=@scan2.jpg' http://localhost:5000/api/predict/batch",
+            "register": "curl -X POST -H 'Content-Type: application/json' -d '{\"username\":\"user\",\"email\":\"user@example.com\",\"password\":\"password\",\"fullName\":\"Full Name\"}' http://localhost:5000/api/auth/register",
+            "login": "curl -X POST -H 'Content-Type: application/json' -d '{\"username\":\"user\",\"password\":\"password\"}' http://localhost:5000/api/auth/login",
+            "curl_predict": "curl -X POST -H 'Authorization: Bearer YOUR_TOKEN' -F 'image=@brain_scan.jpg' http://localhost:5000/api/predict",
+            "curl_batch": "curl -X POST -H 'Authorization: Bearer YOUR_TOKEN' -F 'images=@scan1.jpg' -F 'images=@scan2.jpg' http://localhost:5000/api/predict/batch",
             "curl_health": "curl http://localhost:5000/api/health",
-            "curl_charts": "curl http://localhost:5000/api/results/charts",  # New
-            "curl_statistics": "curl http://localhost:5000/api/results/statistics",  # New
+            "curl_charts": "curl http://localhost:5000/api/results/charts",
+            "curl_statistics": "curl http://localhost:5000/api/results/statistics",
             "web_test": "Visit http://localhost:5000/test for web interface"
         },
-        "research_features": {  # New section
+        "research_features": {
             "available_charts": [
                 "Class Distribution Bar Chart",
                 "Confidence Distribution Histogram", 
@@ -149,10 +374,14 @@ def test_interface():
 def get_uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# === NEW API ENDPOINTS ===
+# ============================================================================
+# UPDATED API ENDPOINTS (With Authentication)
+# ============================================================================
 
 @app.route('/api/predict', methods=['POST'])
+@token_required  # NEW: Authentication required
 def predict():
+    """Single image prediction - PROTECTED"""
     try:
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -166,54 +395,90 @@ def predict():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
 
-        # Load and preprocess image
-        img = load_img(filepath, target_size=(128, 128))
-        img_array = img_to_array(img) / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
+        # Get file size
+        file_size = os.path.getsize(filepath)
 
         # Make prediction
-        predictions = model.predict(img_array)
-        predicted_class_index = np.argmax(predictions[0])
-        predicted_class = class_labels[predicted_class_index]
-        confidence_score = float(predictions[0][predicted_class_index])  # IMPORTANT: Convert to float
+        start_time = datetime.datetime.now()
+        result, confidence, all_predictions = predict_tumor(filepath)
+        end_time = datetime.datetime.now()
+        processing_time = (end_time - start_time).total_seconds()
 
-        # FIXED: Ensure confidence is properly formatted
-        response_data = {
-            'prediction': predicted_class,
-            'confidence': confidence_score,  # This should be between 0 and 1
-            'confidence_percentage': round(confidence_score * 100, 2),  # Add this for clarity
-            'all_predictions': {
-                class_labels[i]: float(predictions[0][i]) 
-                for i in range(len(class_labels))
-            },
+        # Get tumor information
+        confidence_percentage = float(confidence * 100)
+        tumor_info = get_tumor_information(result, confidence_percentage)
+
+        # Prepare prediction data for database
+        prediction_data = {
+            'predictionType': 'single',
             'filename': filename,
-            'timestamp': datetime.datetime.now().isoformat()
+            'fileSize': file_size,
+            'prediction': result,
+            'tumorType': tumor_info['tumorType'],
+            'confidence': float(confidence),
+            'confidencePercentage': confidence_percentage,
+            'confidenceLevel': tumor_info['confidenceLevel'],
+            'severity': tumor_info['severity'],
+            'medicalDescription': tumor_info['description'],
+            'recommendations': tumor_info['recommendations'],
+            'processingTime': f"{processing_time:.3f}s",
+            'modelVersion': 'brain_tumor_model_v1',
+            'analysisDate': datetime.datetime.utcnow(),
+            'probabilities': {
+                class_labels[i]: float(all_predictions[i]) 
+                for i in range(len(class_labels))
+            }
         }
-        
-        # Add to prediction history
+
+        # Save to database
+        prediction_id = save_prediction_to_db(request.current_user, prediction_data)
+
+        # Add to prediction history (backwards compatibility)
         prediction_history.append({
-            'prediction': predicted_class,
-            'confidence': confidence_score,
-            'result': predicted_class,  # For analytics
-            'method': 'web_interface',
+            'prediction': result,
+            'confidence': float(confidence),
+            'result': result,
+            'method': 'api',
             'timestamp': datetime.datetime.now().isoformat(),
             'filename': filename
         })
 
-        # DEBUG: Print to console to verify
-        print(f"DEBUG - Prediction: {predicted_class}, Confidence: {confidence_score}")
-        
+        # Prepare response
+        response_data = {
+            'prediction': result,
+            'confidence': float(confidence),
+            'confidence_percentage': round(confidence_percentage, 2),
+            'tumorInfo': tumor_info,
+            'all_predictions': {
+                class_labels[i]: float(all_predictions[i]) 
+                for i in range(len(class_labels))
+            },
+            'filename': filename,
+            'timestamp': datetime.datetime.now().isoformat(),
+            'processing_time': f"{processing_time:.3f}s",
+            'predictionId': prediction_id
+        }
+
         return jsonify(response_data)
 
     except Exception as e:
-        print(f"ERROR in predict endpoint: {str(e)}")  # DEBUG
+        print(f"ERROR in predict endpoint: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/health', methods=['GET'])
 def api_health():
+    """Health check with database status"""
+    db_status = "connected"
+    try:
+        db = get_database()
+        db.command('ping')
+    except:
+        db_status = "disconnected"
+    
     return jsonify({
         "status": "healthy",
         "model_loaded": model is not None,
+        "database": db_status,
         "timestamp": datetime.datetime.now().isoformat(),
         "upload_folder": UPLOAD_FOLDER,
         "upload_folder_exists": os.path.exists(UPLOAD_FOLDER)
@@ -235,29 +500,37 @@ def api_classes():
 @app.route('/api/model/info', methods=['GET'])
 def api_model_info():
     return jsonify({
-        "model_type": "Brain Tumor Classification CNN",
+        "model_type": "Brain Tumor Classification CNN (VGG16 Transfer Learning)",
         "input_size": [128, 128, 3],
         "classes": class_labels,
-        "total_parameters": model.count_params() if hasattr(model, 'count_params') else "Unknown",
+        "total_parameters": model.count_params() if model and hasattr(model, 'count_params') else "Unknown",
         "model_format": "Keras H5",
-        "preprocessing": "Normalization (0-1 range)"
+        "preprocessing": "Normalization (0-1 range)",
+        "framework": "TensorFlow/Keras"
     })
 
 @app.route('/api/debug/prediction', methods=['POST'])
+@optional_token  # NEW: Optional authentication
 def api_debug_prediction():
+    """Debug prediction - Optional authentication"""
     try:
         if 'image' not in request.files:
             return jsonify({"error": "No image provided"}), 400
         
         file = request.files['image']
-        file_location = os.path.join(app.config['UPLOAD_FOLDER'], f"debug_{file.filename}")
+        filename = secure_filename(file.filename)
+        file_location = os.path.join(app.config['UPLOAD_FOLDER'], f"debug_{filename}")
         file.save(file_location)
         
         # Get detailed prediction info
         result, confidence, all_predictions = predict_tumor(file_location)
         
+        user_info = None
+        if hasattr(request, 'current_user'):
+            user_info = request.current_user
+        
         return jsonify({
-            "filename": file.filename,
+            "filename": filename,
             "prediction": result,
             "confidence": float(confidence),
             "raw_predictions": all_predictions.tolist(),
@@ -272,13 +545,15 @@ def api_debug_prediction():
                 "max_probability": float(np.max(all_predictions)),
                 "min_probability": float(np.min(all_predictions)),
                 "prediction_spread": float(np.max(all_predictions) - np.min(all_predictions))
-            }
+            },
+            "authenticated": user_info is not None,
+            "user": user_info['username'] if user_info else 'anonymous'
         })
         
     except Exception as e:
         return jsonify({"error": str(e), "debug": True}), 500
 
-@app.route('/api/debug/class-order', methods=['GET'])  # Changed from POST to GET
+@app.route('/api/debug/class-order', methods=['GET'])
 def api_debug_class_order():
     return jsonify({
         "current_class_order": class_labels,
@@ -287,120 +562,242 @@ def api_debug_class_order():
     })
 
 @app.route('/api/analytics/summary', methods=['GET'])
+@token_required  # NEW: Authentication required
 def api_analytics_summary():
-    if not prediction_history:
+    """Get user's analytics summary - PROTECTED"""
+    try:
+        db = get_database()
+        user_id = ObjectId(request.current_user['user_id'])
+        
+        # Total predictions from database
+        total_predictions = db.predictions.count_documents({'userId': user_id})
+        
+        # Tumor type distribution
+        pipeline = [
+            {'$match': {'userId': user_id, 'tumorType': {'$exists': True}}},
+            {'$group': {'_id': '$tumorType', 'count': {'$sum': 1}}}
+        ]
+        tumor_distribution = list(db.predictions.aggregate(pipeline))
+        
+        # Recent activity
+        recent = list(db.predictions.find(
+            {'userId': user_id}
+        ).sort('createdAt', -1).limit(5))
+        
+        for item in recent:
+            item['_id'] = str(item['_id'])
+            item['userId'] = str(item['userId'])
+        
         return jsonify({
-            "total_predictions": 0,
-            "message": "No predictions made yet"
+            'totalPredictions': total_predictions,
+            'tumorDistribution': {item['_id']: item['count'] for item in tumor_distribution},
+            'recentActivity': recent
         })
-    
-    # Simple analytics - Convert any remaining numpy types
-    total = len(prediction_history)
-    tumor_count = sum(1 for p in prediction_history if "No Tumor" not in p["result"])
-    no_tumor_count = total - tumor_count
-    
-    # Clean recent predictions for JSON serialization
-    recent_predictions = prediction_history[-5:] if len(prediction_history) >= 5 else prediction_history
-    cleaned_predictions = []
-    
-    for pred in recent_predictions:
-        cleaned_pred = {
-            "timestamp": pred["timestamp"],
-            "filename": pred["filename"],
-            "result": pred["result"],
-            "confidence": float(pred["confidence"]),  # Ensure it's Python float
-            "method": pred["method"]
-        }
-        cleaned_predictions.append(cleaned_pred)
-    
-    return jsonify(clean_for_json({
-        "total_predictions": total,
-        "tumor_detected": tumor_count,
-        "no_tumor_detected": no_tumor_count,
-        "tumor_detection_rate": f"{(tumor_count/total)*100:.1f}%" if total > 0 else "0%",
-        "recent_predictions": prediction_history[-5:] if len(prediction_history) >= 5 else prediction_history
-    }))
+        
+    except Exception as e:
+        # Fallback to in-memory data if database fails
+        if not prediction_history:
+            return jsonify({
+                "total_predictions": 0,
+                "message": "No predictions made yet"
+            })
+        
+        total = len(prediction_history)
+        tumor_count = sum(1 for p in prediction_history if "No Tumor" not in p["result"])
+        no_tumor_count = total - tumor_count
+        
+        recent_predictions = prediction_history[-5:] if len(prediction_history) >= 5 else prediction_history
+        cleaned_predictions = []
+        
+        for pred in recent_predictions:
+            cleaned_pred = {
+                "timestamp": pred["timestamp"],
+                "filename": pred["filename"],
+                "result": pred["result"],
+                "confidence": float(pred["confidence"]),
+                "method": pred["method"]
+            }
+            cleaned_predictions.append(cleaned_pred)
+        
+        return jsonify(clean_for_json({
+            "total_predictions": total,
+            "tumor_detected": tumor_count,
+            "no_tumor_detected": no_tumor_count,
+            "tumor_detection_rate": f"{(tumor_count/total)*100:.1f}%" if total > 0 else "0%",
+            "recent_predictions": cleaned_predictions
+        }))
 
 @app.route('/api/predictions/history', methods=['GET'])
+@token_required  # NEW: Authentication required
 def api_predictions_history():
-    limit = request.args.get('limit', 10, type=int)
-    
-    # Clean all predictions for JSON serialization
-    recent_predictions = prediction_history[-limit:] if prediction_history else []
-    cleaned_predictions = []
-    
-    for pred in recent_predictions:
-        cleaned_pred = {
-            "timestamp": pred["timestamp"],
-            "filename": pred["filename"],
-            "result": pred["result"],
-            "confidence": float(pred["confidence"]),  # Ensure it's Python float
-            "method": pred["method"]
-        }
-        cleaned_predictions.append(cleaned_pred)
-    
-    return jsonify(clean_for_json({
-        "total_predictions": len(prediction_history),
-        "recent_predictions": prediction_history[-limit:] if prediction_history else [],
-        "limit": limit
-    }))
-
-# Add this new endpoint for multiple image upload
-@app.route('/api/predict/batch', methods=['POST'])
-def api_predict_batch():
+    """Get user's prediction history - PROTECTED"""
     try:
-        files = request.files.getlist('images')  # Get multiple files
+        db = get_database()
+        limit = int(request.args.get('limit', 20))
+        
+        predictions = list(db.predictions.find(
+            {'userId': ObjectId(request.current_user['user_id'])},
+            {'password': 0}
+        ).sort('createdAt', -1).limit(limit))
+        
+        # Convert ObjectId to string
+        for pred in predictions:
+            pred['_id'] = str(pred['_id'])
+            pred['userId'] = str(pred['userId'])
+            if 'batchId' in pred:
+                pred['batchId'] = str(pred['batchId'])
+        
+        return jsonify({
+            'total': len(predictions),
+            'predictions': predictions
+        })
+        
+    except Exception as e:
+        # Fallback to in-memory data
+        limit = request.args.get('limit', 10, type=int)
+        recent_predictions = prediction_history[-limit:] if prediction_history else []
+        cleaned_predictions = []
+        
+        for pred in recent_predictions:
+            cleaned_pred = {
+                "timestamp": pred["timestamp"],
+                "filename": pred["filename"],
+                "result": pred["result"],
+                "confidence": float(pred["confidence"]),
+                "method": pred["method"]
+            }
+            cleaned_predictions.append(cleaned_pred)
+        
+        return jsonify(clean_for_json({
+            "total_predictions": len(prediction_history),
+            "recent_predictions": cleaned_predictions,
+            "limit": limit
+        }))
+
+# Batch prediction - PROTECTED
+@app.route('/api/predict/batch', methods=['POST'])
+@token_required  # NEW: Authentication required
+def api_predict_batch():
+    """Batch prediction - PROTECTED"""
+    try:
+        files = request.files.getlist('images')
         
         if not files or len(files) == 0:
             return jsonify({"error": "No images provided"}), 400
         
         results = []
+        tumor_types = []
+        batch_id = ObjectId()  # Generate batch ID
         
         for file in files:
             if file.filename == '':
                 continue
-                
-            # Save file
-            file_location = os.path.join(app.config['UPLOAD_FOLDER'], f"batch_{file.filename}")
+            
+            filename = secure_filename(file.filename)
+            file_location = os.path.join(app.config['UPLOAD_FOLDER'], f"batch_{filename}")
             file.save(file_location)
             
-            # Predict
-            result, confidence, all_predictions = predict_tumor(file_location)
+            file_size = os.path.getsize(file_location)
             
-            # Store in history
+            # Predict
+            start_time = datetime.datetime.now()
+            result, confidence, all_predictions = predict_tumor(file_location)
+            end_time = datetime.datetime.now()
+            processing_time = (end_time - start_time).total_seconds()
+            
+            confidence_percentage = float(confidence * 100)
+            tumor_info = get_tumor_information(result, confidence_percentage)
+            
+            # Track tumor types
+            if tumor_info['tumorType'] != 'notumor':
+                tumor_types.append(tumor_info['tumorType'])
+            
+            # Save individual result to batch_results collection
+            try:
+                db = get_database()
+                db.batch_results.insert_one({
+                    'batchId': batch_id,
+                    'userId': ObjectId(request.current_user['user_id']),
+                    'username': request.current_user['username'],
+                    'filename': filename,
+                    'fileSize': file_size,
+                    'prediction': result,
+                    'tumorType': tumor_info['tumorType'],
+                    'confidence': float(confidence),
+                    'confidencePercentage': confidence_percentage,
+                    'severity': tumor_info['severity'],
+                    'processingTime': f"{processing_time:.3f}s",
+                    'createdAt': datetime.datetime.utcnow()
+                })
+            except Exception as db_error:
+                print(f"Error saving batch result: {db_error}")
+            
+            # Add to in-memory history
             prediction_history.append({
                 "timestamp": datetime.datetime.now().isoformat(),
-                "filename": file.filename,
+                "filename": filename,
                 "result": result,
                 "confidence": float(confidence),
                 "method": "batch_api"
             })
             
-            # Add to results
             results.append({
-                "filename": file.filename,
+                "filename": filename,
                 "prediction": result,
                 "confidence": f"{confidence*100:.2f}%",
+                "confidence_percentage": confidence_percentage,
                 "confidence_score": float(confidence),
+                "processing_time": f"{processing_time:.3f}s",
                 "probabilities": {
-                    class_labels[i]: float(all_predictions[i]) for i in range(len(class_labels))
+                    class_labels[i]: float(all_predictions[i]) 
+                    for i in range(len(class_labels))
                 }
             })
+        
+        # Calculate batch summary
+        tumor_detected = sum(1 for r in results if "No Tumor" not in r["prediction"])
+        tumor_type_counts = {}
+        for tumor_type in tumor_types:
+            tumor_type_counts[tumor_type] = tumor_type_counts.get(tumor_type, 0) + 1
+        
+        avg_confidence = sum(r["confidence_score"] for r in results) / len(results) if results else 0
+        
+        batch_summary = {
+            "tumor_detected": tumor_detected,
+            "no_tumor": sum(1 for r in results if "No Tumor" in r["prediction"]),
+            "average_confidence": f"{avg_confidence*100:.2f}%",
+            "by_tumor_type": tumor_type_counts
+        }
+        
+        # Save batch summary to predictions collection
+        try:
+            batch_data = {
+                'predictionType': 'batch',
+                'batchId': batch_id,
+                'totalImages': len(results),
+                'batchSummary': batch_summary,
+                'processingTime': sum(float(r['processing_time'].replace('s', '')) for r in results),
+                'modelVersion': 'brain_tumor_model_v1',
+                'analysisDate': datetime.datetime.utcnow()
+            }
+            save_prediction_to_db(request.current_user, batch_data)
+        except Exception as db_error:
+            print(f"Error saving batch summary: {db_error}")
         
         return jsonify({
             "total_images": len(results),
             "results": results,
-            "batch_summary": {
-                "tumor_detected": sum(1 for r in results if "No Tumor" not in r["prediction"]),
-                "no_tumor": sum(1 for r in results if "No Tumor" in r["prediction"]),
-                "average_confidence": sum(r["confidence_score"] for r in results) / len(results) if results else 0
-            }
+            "batch_summary": batch_summary,
+            "batchId": str(batch_id)
         })
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# New Results and Analytics Endpoints
+# ============================================================================
+# CHART AND STATISTICS ENDPOINTS (Existing - Unchanged)
+# ============================================================================
+
 @app.route('/api/results/charts', methods=['GET'])
 def api_results_charts():
     """Generate various charts and return as base64 encoded images"""
@@ -439,7 +836,6 @@ def api_results_charts():
 
 def generate_class_distribution_chart():
     """Generate class distribution bar chart"""
-    # Extract results from prediction history
     results = [pred['result'] for pred in prediction_history]
     result_counts = Counter(results)
     
@@ -455,14 +851,12 @@ def generate_class_distribution_chart():
     plt.ylabel('Number of Predictions', fontsize=12)
     plt.xticks(rotation=45, ha='right')
     
-    # Add value labels on bars
     for bar, count in zip(bars, counts):
         plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1,
                 str(count), ha='center', va='bottom', fontweight='bold')
     
     plt.tight_layout()
     
-    # Convert to base64
     buffer = BytesIO()
     plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
     buffer.seek(0)
@@ -487,7 +881,6 @@ def generate_confidence_distribution_chart():
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    # Convert to base64
     buffer = BytesIO()
     plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
     buffer.seek(0)
@@ -498,10 +891,7 @@ def generate_confidence_distribution_chart():
 
 def generate_timeline_chart():
     """Generate predictions over time line chart"""
-    # Convert timestamps and group by hour
     timestamps = [datetime.datetime.fromisoformat(pred['timestamp']) for pred in prediction_history]
-    
-    # Group predictions by hour
     hourly_counts = Counter([ts.strftime('%Y-%m-%d %H:00') for ts in timestamps])
     sorted_hours = sorted(hourly_counts.keys())
     counts = [hourly_counts[hour] for hour in sorted_hours]
@@ -519,7 +909,6 @@ def generate_timeline_chart():
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    # Convert to base64
     buffer = BytesIO()
     plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
     buffer.seek(0)
@@ -545,12 +934,10 @@ def generate_method_usage_chart():
     
     plt.title('API Usage Methods', fontsize=16, fontweight='bold')
     
-    # Enhance text
     for autotext in autotexts:
         autotext.set_color('white')
         autotext.set_fontweight('bold')
     
-    # Convert to base64
     buffer = BytesIO()
     plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
     buffer.seek(0)
@@ -567,7 +954,6 @@ def generate_confidence_trend_chart():
     
     plt.figure(figsize=(12, 6))
     
-    # Create scatter plot with different colors for different results
     unique_results = list(set(results))
     colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4']
     
@@ -588,7 +974,6 @@ def generate_confidence_trend_chart():
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    # Convert to base64
     buffer = BytesIO()
     plt.savefig(buffer, format='png', dpi=300, bbox_inches='tight')
     buffer.seek(0)
@@ -597,7 +982,6 @@ def generate_confidence_trend_chart():
     
     return chart_base64
 
-# Statistics Summary Endpoint
 @app.route('/api/results/statistics', methods=['GET'])
 def api_results_statistics():
     """Get detailed statistics for research analysis"""
@@ -605,12 +989,10 @@ def api_results_statistics():
         if not prediction_history:
             return jsonify({"error": "No prediction data available"}), 404
         
-        # Extract data
         confidences = [pred['confidence'] for pred in prediction_history]
         results = [pred['result'] for pred in prediction_history]
         methods = [pred['method'] for pred in prediction_history]
         
-        # Calculate statistics
         stats = {
             "overall_statistics": {
                 "total_predictions": len(prediction_history),
@@ -630,7 +1012,6 @@ def api_results_statistics():
             }
         }
         
-        # Confidence by class
         for result in set(results):
             class_confidences = [pred['confidence'] for pred in prediction_history if pred['result'] == result]
             if class_confidences:
@@ -645,23 +1026,23 @@ def api_results_statistics():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def clean_for_json(obj):
-    """Convert numpy types to Python types for JSON serialization"""
-    if isinstance(obj, dict):
-        return {key: clean_for_json(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [clean_for_json(item) for item in obj]
-    elif hasattr(obj, 'item'):  # numpy types
-        return obj.item()
-    elif isinstance(obj, (np.float32, np.float64)):
-        return float(obj)
-    elif isinstance(obj, (np.int32, np.int64)):
-        return int(obj)
-    return obj
+# ============================================================================
+# APPLICATION STARTUP
+# ============================================================================
 
 if __name__ == '__main__':
     print("🚀 Brain Tumor Detection API Starting...")
     print(f"📁 Upload folder: {UPLOAD_FOLDER}")
     print(f"🔬 Model classes: {class_labels}")
     print("📡 API Endpoints available at: http://localhost:5000")
-    app.run(debug=True)
+    
+    # Test database connection
+    try:
+        db = get_database()
+        print("✅ Database connection successful")
+    except Exception as e:
+        print(f"❌ Database connection failed: {e}")
+        print("⚠️ Application will run with limited functionality")
+    
+    # Run Flask app
+    app.run(debug=True, host='0.0.0.0', port=5000)

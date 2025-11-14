@@ -2,11 +2,13 @@ absl-py==2.1.0
 annotated-types==0.7.0
 anyio==4.8.0
 astunparse==1.6.3
+bcrypt==4.1.2
 blinker==1.9.0
 certifi==2024.12.14
 charset-normalizer==3.4.1
 click==8.1.8
 colorama==0.4.6
+dnspython-2.8.0
 fastapi==0.115.6
 Flask==3.1.0
 flask-cors==4.0.0
@@ -39,6 +41,9 @@ protobuf==5.29.2
 pydantic==2.10.4
 pydantic_core==2.27.2
 Pygments==2.19.1
+PyJWT==2.8.0
+pymongo==4.6.1
+python-dotenv==1.0.0
 python-multipart==0.0.20
 requests==2.32.3
 rich==13.9.4

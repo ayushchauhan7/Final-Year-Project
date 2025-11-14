@@ -1479,9 +1479,9 @@ SOFTWARE.
 
 - 🏫 **Institution**: ABES Engineering College, Ghaziabad
 - 📚 **Program**: Bachelor of Technology (B.Tech)
-- 🔬 **Department**: Computer Science & Engineering
-- 📅 **Academic Year**: 2024-2025
-- 👨‍🏫 **Project Guide**: [Guide Name]
+- 🔬 **Department**: Computer Science & Engineering(Data Science)
+- 📅 **Academic Year**: 2025-2026
+- 👨‍🏫 **Project Guide**: Dr. Neha Yadav
 - 📝 **Project Type**: Final Year Project
 
 ---
@@ -1492,7 +1492,7 @@ We would like to express our gratitude to:
 
 ### Academic Support
 - **ABES Engineering College** - For providing resources and infrastructure
-- **CSE Department** - For guidance and support
+- **CSE-(DS) Department** - For guidance and support
 - **Project Guide** - For mentorship and valuable feedback
 - **Faculty Members** - For their continuous encouragement
 
@@ -1742,7 +1742,7 @@ We'd love to hear from you!
 </p>
 
 <p align="center">
-  <em>ABES Engineering College | Final Year Project 2024-2025</em>
+  <em>ABES Engineering College | Final Year Project 2025-2026</em>
 </p>
 
 <p align="center">
